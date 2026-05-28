@@ -17,10 +17,10 @@ beforeEach(function (): void {
         $table->string('trace_id')->index();
         $table->string('name');
         $table->string('status');
-        $table->timestamp('started_at')->nullable();
-        $table->timestamp('ended_at')->nullable();
+        $table->timestampTz('started_at', 6)->nullable();
+        $table->timestampTz('ended_at', 6)->nullable();
         $table->float('duration_ms')->nullable();
-        $table->timestamp('exported_at')->nullable();
+        $table->timestampTz('exported_at', 6)->nullable();
         $table->json('payload');
         $table->timestamps();
     });
@@ -33,8 +33,8 @@ beforeEach(function (): void {
         $table->string('name');
         $table->string('kind');
         $table->string('status');
-        $table->timestamp('started_at')->nullable();
-        $table->timestamp('ended_at')->nullable();
+        $table->timestampTz('started_at', 6)->nullable();
+        $table->timestampTz('ended_at', 6)->nullable();
         $table->float('duration_ms')->nullable();
         $table->json('attributes')->nullable();
         $table->json('input')->nullable();
@@ -80,6 +80,8 @@ it('stores trace and span rows', function (): void {
     expect(DB::table('ai_observability_traces')->count())->toBe(1)
         ->and(DB::table('ai_observability_spans')->count())->toBe(1)
         ->and($traceRow->trace_id)->toBe('trace_database_123')
+        ->and($traceRow->started_at)->toBe('2026-01-01 00:00:00.000000')
+        ->and($traceRow->ended_at)->toBe('2026-01-01 00:00:01.250000')
         ->and(json_decode($traceRow->payload, true, flags: JSON_THROW_ON_ERROR))
         ->toMatchArray([
             'trace_id' => 'trace_database_123',
@@ -87,6 +89,8 @@ it('stores trace and span rows', function (): void {
         ])
         ->and($spanRow->trace_id)->toBe('trace_database_123')
         ->and($spanRow->span_id)->toBe('span_database_123')
+        ->and($spanRow->started_at)->toBe('2026-01-01 00:00:00.100000')
+        ->and($spanRow->ended_at)->toBe('2026-01-01 00:00:01.000000')
         ->and(json_decode($spanRow->attributes, true, flags: JSON_THROW_ON_ERROR))
         ->toMatchArray([
             'llm.model_name' => 'gpt-4.1',
@@ -103,4 +107,26 @@ it('stores trace and span rows', function (): void {
                 'openinference.span.kind' => 'llm',
             ],
         ]);
+});
+
+it('rolls back trace rows when span inserts fail', function (): void {
+    $trace = new Trace(
+        traceId: 'trace_rollback_123',
+        name: 'rollback export',
+        startedAt: '2026-01-01T00:00:00.000000Z',
+    );
+
+    $trace->addSpan(new Span(
+        traceId: 'trace_rollback_123',
+        spanId: 'span_rollback_123',
+        parentSpanId: null,
+        name: 'missing span table',
+        kind: SpanKind::Llm,
+    ));
+
+    Schema::drop('ai_observability_spans');
+
+    (new DatabaseExporter(connection: null))->export($trace);
+
+    expect(DB::table('ai_observability_traces')->count())->toBe(0);
 });
