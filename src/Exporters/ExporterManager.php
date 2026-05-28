@@ -82,6 +82,7 @@ final class ExporterManager
             'null' => new NullExporter,
             'log' => $this->createLogExporter($config),
             'database' => $this->createDatabaseExporter($config),
+            'otlp' => $this->createOtlpExporter($config),
             'stack' => $this->createStackExporter($name, $config),
             default => throw new InvalidArgumentException("Exporter driver [{$driver}] is not supported."),
         };
@@ -112,6 +113,14 @@ final class ExporterManager
         return new DatabaseExporter(
             is_string($connection) && $connection !== '' ? $connection : null,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function createOtlpExporter(array $config): OtlpExporter
+    {
+        return new OtlpExporter($config);
     }
 
     /**

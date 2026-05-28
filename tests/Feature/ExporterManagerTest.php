@@ -9,6 +9,7 @@ use Tracefast\LaravelAiObservability\Data\Trace;
 use Tracefast\LaravelAiObservability\Exporters\DatabaseExporter;
 use Tracefast\LaravelAiObservability\Exporters\ExporterManager;
 use Tracefast\LaravelAiObservability\Exporters\NullExporter;
+use Tracefast\LaravelAiObservability\Exporters\OtlpExporter;
 use Tracefast\LaravelAiObservability\Exporters\StackExporter;
 
 it('resolves the configured default exporter', function (): void {
@@ -26,6 +27,16 @@ it('resolves stack exporters from configured channels', function (): void {
 
 it('resolves database exporters', function (): void {
     expect(app(ExporterManager::class)->exporter('database'))->toBeInstanceOf(DatabaseExporter::class);
+});
+
+it('resolves otlp exporters', function (): void {
+    config()->set('ai-observability.exporters.otlp', [
+        'driver' => 'otlp',
+        'endpoint' => 'https://example.test/otel',
+        'headers' => [],
+    ]);
+
+    expect(app(ExporterManager::class)->exporter('otlp'))->toBeInstanceOf(OtlpExporter::class);
 });
 
 it('rejects direct stack cycles', function (): void {
