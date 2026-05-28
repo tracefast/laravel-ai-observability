@@ -10,25 +10,32 @@ return new class extends Migration
     {
         Schema::create('ai_observability_traces', function (Blueprint $table): void {
             $table->id();
-            $table->uuid('trace_id')->unique();
-            $table->string('name')->nullable();
-            $table->json('attributes')->nullable();
+            $table->string('trace_id')->index();
+            $table->string('name');
+            $table->string('status');
             $table->timestamp('started_at')->nullable();
             $table->timestamp('ended_at')->nullable();
+            $table->float('duration_ms')->nullable();
+            $table->timestamp('exported_at')->nullable();
+            $table->json('payload');
             $table->timestamps();
         });
 
         Schema::create('ai_observability_spans', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('trace_id')->constrained('ai_observability_traces')->cascadeOnDelete();
-            $table->uuid('span_id')->unique();
-            $table->uuid('parent_span_id')->nullable()->index();
+            $table->string('trace_id')->index();
+            $table->string('span_id')->index();
+            $table->string('parent_span_id')->nullable()->index();
             $table->string('name');
-            $table->string('kind')->nullable();
-            $table->json('attributes')->nullable();
-            $table->json('events')->nullable();
+            $table->string('kind');
+            $table->string('status');
             $table->timestamp('started_at')->nullable();
             $table->timestamp('ended_at')->nullable();
+            $table->float('duration_ms')->nullable();
+            $table->json('attributes')->nullable();
+            $table->json('input')->nullable();
+            $table->json('output')->nullable();
+            $table->json('payload');
             $table->timestamps();
         });
     }
