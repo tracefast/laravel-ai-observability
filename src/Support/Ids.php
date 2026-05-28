@@ -13,7 +13,7 @@ final class Ids
      */
     public static function traceId(): string
     {
-        return bin2hex(random_bytes(16));
+        return self::hex(16);
     }
 
     /**
@@ -21,6 +21,18 @@ final class Ids
      */
     public static function spanId(): string
     {
-        return bin2hex(random_bytes(8));
+        return self::hex(8);
+    }
+
+    /**
+     * @throws RandomException
+     */
+    private static function hex(int $bytes): string
+    {
+        do {
+            $id = bin2hex(random_bytes($bytes));
+        } while (preg_match('/^0+$/', $id) === 1);
+
+        return $id;
     }
 }

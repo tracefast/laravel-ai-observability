@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tracefast\LaravelAiObservability\Data;
 
-use Tracefast\LaravelAiObservability\Support\Arr;
 use Tracefast\LaravelAiObservability\Support\Clock;
 
 final class Span
@@ -45,7 +44,7 @@ final class Span
      */
     public function toArray(): array
     {
-        return Arr::withoutNulls([
+        return [
             'trace_id' => $this->traceId,
             'span_id' => $this->spanId,
             'parent_span_id' => $this->parentSpanId,
@@ -62,6 +61,6 @@ final class Span
             'output' => $this->output,
             'error_type' => $this->errorType,
             'error_message' => $this->errorMessage,
-        ]);
+        ];
     }
 }
