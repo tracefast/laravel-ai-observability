@@ -23,6 +23,38 @@ it('resolves stack exporters from configured channels', function (): void {
     expect(app(ExporterManager::class)->exporter('stack'))->toBeInstanceOf(StackExporter::class);
 });
 
+it('rejects direct stack cycles', function (): void {
+    config()->set('ai-observability.exporters.stack.channels', ['stack']);
+
+    expect(fn () => app(ExporterManager::class)->exporter('stack'))
+        ->toThrow(InvalidArgumentException::class, 'Circular exporter stack detected while resolving [stack].');
+});
+
+it('rejects indirect stack cycles', function (): void {
+    config()->set('ai-observability.exporters.stack.channels', ['secondary']);
+    config()->set('ai-observability.exporters.secondary', [
+        'driver' => 'stack',
+        'channels' => ['stack'],
+    ]);
+
+    expect(fn () => app(ExporterManager::class)->exporter('stack'))
+        ->toThrow(InvalidArgumentException::class, 'Circular exporter stack detected while resolving [stack].');
+});
+
+it('rejects non-string stack channels', function (): void {
+    config()->set('ai-observability.exporters.stack.channels', ['null', 123]);
+
+    expect(fn () => app(ExporterManager::class)->exporter('stack'))
+        ->toThrow(InvalidArgumentException::class, 'Stack exporter [stack] channel at index [1] must be a non-empty string.');
+});
+
+it('rejects empty string stack channels', function (): void {
+    config()->set('ai-observability.exporters.stack.channels', ['']);
+
+    expect(fn () => app(ExporterManager::class)->exporter('stack'))
+        ->toThrow(InvalidArgumentException::class, 'Stack exporter [stack] channel at index [0] must be a non-empty string.');
+});
+
 it('supports custom driver extensions', function (): void {
     config()->set('ai-observability.exporters.memory', [
         'driver' => 'memory',

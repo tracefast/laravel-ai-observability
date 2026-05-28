@@ -22,6 +22,11 @@ final class ExporterManager
      */
     private array $exporters = [];
 
+    /**
+     * @var array<string, true>
+     */
+    private array $resolving = [];
+
     public function __construct(
         private readonly Application $app,
     ) {}
@@ -34,7 +39,17 @@ final class ExporterManager
             return $this->exporters[$name];
         }
 
-        return $this->exporters[$name] = $this->resolve($name);
+        if (isset($this->resolving[$name])) {
+            throw new InvalidArgumentException("Circular exporter stack detected while resolving [{$name}].");
+        }
+
+        $this->resolving[$name] = true;
+
+        try {
+            return $this->exporters[$name] = $this->resolve($name);
+        } finally {
+            unset($this->resolving[$name]);
+        }
     }
 
     /**
@@ -66,7 +81,7 @@ final class ExporterManager
         return match ($driver) {
             'null' => new NullExporter,
             'log' => $this->createLogExporter($config),
-            'stack' => $this->createStackExporter($config),
+            'stack' => $this->createStackExporter($name, $config),
             default => throw new InvalidArgumentException("Exporter driver [{$driver}] is not supported."),
         };
     }
@@ -89,17 +104,36 @@ final class ExporterManager
     /**
      * @param  array<string, mixed>  $config
      */
-    private function createStackExporter(array $config): StackExporter
+    private function createStackExporter(string $name, array $config): StackExporter
     {
         $channels = $config['channels'] ?? [];
 
         if (! is_array($channels)) {
-            throw new InvalidArgumentException('Stack exporter channels must be an array.');
+            throw new InvalidArgumentException("Stack exporter [{$name}] channels must be an array.");
         }
 
         return new StackExporter(array_map(
-            fn (string $name): Exporter => $this->exporter($name),
-            $channels,
+            fn (string $channel): Exporter => $this->exporter($channel),
+            $this->validateStackChannels($name, $channels),
         ));
+    }
+
+    /**
+     * @param  array<mixed>  $channels
+     * @return list<string>
+     */
+    private function validateStackChannels(string $name, array $channels): array
+    {
+        $validated = [];
+
+        foreach ($channels as $index => $channel) {
+            if (! is_string($channel) || $channel === '') {
+                throw new InvalidArgumentException("Stack exporter [{$name}] channel at index [{$index}] must be a non-empty string.");
+            }
+
+            $validated[] = $channel;
+        }
+
+        return $validated;
     }
 }
