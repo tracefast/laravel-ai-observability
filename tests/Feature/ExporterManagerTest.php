@@ -6,6 +6,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Tracefast\LaravelAiObservability\AiObservability;
 use Tracefast\LaravelAiObservability\Contracts\Exporter;
 use Tracefast\LaravelAiObservability\Data\Trace;
+use Tracefast\LaravelAiObservability\Exporters\DatabaseExporter;
 use Tracefast\LaravelAiObservability\Exporters\ExporterManager;
 use Tracefast\LaravelAiObservability\Exporters\NullExporter;
 use Tracefast\LaravelAiObservability\Exporters\StackExporter;
@@ -21,6 +22,10 @@ it('resolves stack exporters from configured channels', function (): void {
     config()->set('ai-observability.exporters.stack.channels', ['null']);
 
     expect(app(ExporterManager::class)->exporter('stack'))->toBeInstanceOf(StackExporter::class);
+});
+
+it('resolves database exporters', function (): void {
+    expect(app(ExporterManager::class)->exporter('database'))->toBeInstanceOf(DatabaseExporter::class);
 });
 
 it('rejects direct stack cycles', function (): void {

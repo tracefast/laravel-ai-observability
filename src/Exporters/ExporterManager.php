@@ -81,6 +81,7 @@ final class ExporterManager
         return match ($driver) {
             'null' => new NullExporter,
             'log' => $this->createLogExporter($config),
+            'database' => $this->createDatabaseExporter($config),
             'stack' => $this->createStackExporter($name, $config),
             default => throw new InvalidArgumentException("Exporter driver [{$driver}] is not supported."),
         };
@@ -98,6 +99,18 @@ final class ExporterManager
             $this->app->make(LogManager::class),
             is_string($channel) && $channel !== '' ? $channel : null,
             is_string($level) && $level !== '' ? $level : 'debug',
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function createDatabaseExporter(array $config): DatabaseExporter
+    {
+        $connection = $config['connection'] ?? null;
+
+        return new DatabaseExporter(
+            is_string($connection) && $connection !== '' ? $connection : null,
         );
     }
 
