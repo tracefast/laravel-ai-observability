@@ -97,7 +97,7 @@ Braintrust:
 ```env
 AI_OBSERVABILITY_EXPORTER=braintrust
 BRAINTRUST_API_KEY=<braintrust-api-key>
-BRAINTRUST_PARENT=project_name:nexxa
+BRAINTRUST_PARENT=project_name:<project-name>
 ```
 
 Multiple receivers:
