@@ -20,15 +20,37 @@ final class Span
         private SpanStatus $status = SpanStatus::Unset,
         private string $startedAt = '',
         private ?string $endedAt = null,
-        private readonly array $attributes = [],
+        private array $attributes = [],
         private readonly mixed $input = null,
-        private readonly mixed $output = null,
+        private mixed $output = null,
         private readonly ?string $errorType = null,
         private readonly ?string $errorMessage = null,
     ) {
         if ($this->startedAt === '') {
             $this->startedAt = Clock::now();
         }
+    }
+
+    public function spanId(): string
+    {
+        return $this->spanId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    public function withAttributes(array $attributes): self
+    {
+        $this->attributes = array_merge($this->attributes, $attributes);
+
+        return $this;
+    }
+
+    public function withOutput(mixed $output): self
+    {
+        $this->output = $output;
+
+        return $this;
     }
 
     public function finish(?string $endedAt = null, ?SpanStatus $status = null): self

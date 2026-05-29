@@ -33,6 +33,11 @@ final class Trace
         return $this;
     }
 
+    public function traceId(): string
+    {
+        return $this->traceId;
+    }
+
     /**
      * @return list<Span>
      */
