@@ -25,6 +25,14 @@ it('resolves stack exporters from configured channels', function (): void {
     expect(app(ExporterManager::class)->exporter('stack'))->toBeInstanceOf(StackExporter::class);
 });
 
+it('resolves comma separated exporters as an implicit stack', function (): void {
+    expect(app(ExporterManager::class)->exporter('null,log'))->toBeInstanceOf(StackExporter::class);
+});
+
+it('trims comma separated exporter names', function (): void {
+    expect(app(ExporterManager::class)->exporter(' null , log '))->toBeInstanceOf(StackExporter::class);
+});
+
 it('resolves database exporters', function (): void {
     expect(app(ExporterManager::class)->exporter('database'))->toBeInstanceOf(DatabaseExporter::class);
 });

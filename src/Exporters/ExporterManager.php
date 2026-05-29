@@ -34,6 +34,18 @@ final class ExporterManager
     public function exporter(?string $name = null): Exporter
     {
         $name ??= (string) config('ai-observability.default', 'null');
+        $name = trim($name);
+
+        $channels = $this->exporterNames($name);
+
+        if (count($channels) > 1) {
+            return new StackExporter(array_map(
+                fn (string $channel): Exporter => $this->exporter($channel),
+                $channels,
+            ));
+        }
+
+        $name = $channels[0] ?? $name;
 
         if (isset($this->exporters[$name])) {
             return $this->exporters[$name];
@@ -157,5 +169,23 @@ final class ExporterManager
         }
 
         return $validated;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function exporterNames(string $name): array
+    {
+        if (! str_contains($name, ',')) {
+            return [$name];
+        }
+
+        return array_values(array_filter(
+            array_map(
+                fn (string $channel): string => trim($channel),
+                explode(',', $name),
+            ),
+            fn (string $channel): bool => $channel !== '',
+        ));
     }
 }
