@@ -54,31 +54,35 @@ final class LaravelAiEventSubscriber
             return;
         }
 
-        $payload = $this->mapper->prompting($event);
-        $invocationId = $this->invocationId($payload['invocation_id']);
+        try {
+            $payload = $this->mapper->prompting($event);
+            $invocationId = $this->invocationId($payload['invocation_id']);
 
-        if ($invocationId === null) {
-            return;
+            if ($invocationId === null) {
+                return;
+            }
+
+            $now = Clock::now();
+            $traceId = Ids::traceId();
+            $rootSpan = new Span(
+                traceId: $traceId,
+                spanId: Ids::spanId(),
+                parentSpanId: null,
+                name: $payload['name'],
+                kind: SpanKind::Agent,
+                startedAt: $now,
+                attributes: $payload['attributes'],
+                input: $payload['input'],
+            );
+
+            $this->registry->start(
+                $invocationId,
+                new Trace(traceId: $traceId, name: $payload['name'], startedAt: $now),
+                $rootSpan,
+            );
+        } catch (Throwable $exception) {
+            report($exception);
         }
-
-        $now = Clock::now();
-        $traceId = Ids::traceId();
-        $rootSpan = new Span(
-            traceId: $traceId,
-            spanId: Ids::spanId(),
-            parentSpanId: null,
-            name: $payload['name'],
-            kind: SpanKind::Agent,
-            startedAt: $now,
-            attributes: $payload['attributes'],
-            input: $payload['input'],
-        );
-
-        $this->registry->start(
-            $invocationId,
-            new Trace(traceId: $traceId, name: $payload['name'], startedAt: $now),
-            $rootSpan,
-        );
     }
 
     public function handleInvokingTool(object $event): void
@@ -87,33 +91,37 @@ final class LaravelAiEventSubscriber
             return;
         }
 
-        $payload = $this->mapper->invokingTool($event);
-        $invocationId = $this->invocationId($payload['invocation_id']);
-        $toolInvocationId = $this->invocationId($payload['tool_invocation_id']);
+        try {
+            $payload = $this->mapper->invokingTool($event);
+            $invocationId = $this->invocationId($payload['invocation_id']);
+            $toolInvocationId = $this->invocationId($payload['tool_invocation_id']);
 
-        if ($invocationId === null || $toolInvocationId === null) {
-            return;
+            if ($invocationId === null || $toolInvocationId === null) {
+                return;
+            }
+
+            $trace = $this->registry->trace($invocationId);
+            $rootSpan = $this->registry->rootSpan($invocationId);
+
+            if ($trace === null || $rootSpan === null) {
+                return;
+            }
+
+            $toolSpan = new Span(
+                traceId: $trace->traceId(),
+                spanId: Ids::spanId(),
+                parentSpanId: $rootSpan->spanId(),
+                name: $payload['name'],
+                kind: SpanKind::Tool,
+                attributes: $payload['attributes'],
+                input: $payload['input'],
+            );
+
+            $trace->addSpan($toolSpan);
+            $this->toolSpans[$this->toolKey($invocationId, $toolInvocationId)] = $toolSpan;
+        } catch (Throwable $exception) {
+            report($exception);
         }
-
-        $trace = $this->registry->trace($invocationId);
-        $rootSpan = $this->registry->rootSpan($invocationId);
-
-        if ($trace === null || $rootSpan === null) {
-            return;
-        }
-
-        $toolSpan = new Span(
-            traceId: $trace->traceId(),
-            spanId: Ids::spanId(),
-            parentSpanId: $rootSpan->spanId(),
-            name: $payload['name'],
-            kind: SpanKind::Tool,
-            attributes: $payload['attributes'],
-            input: $payload['input'],
-        );
-
-        $trace->addSpan($toolSpan);
-        $this->toolSpans[$this->toolKey($invocationId, $toolInvocationId)] = $toolSpan;
     }
 
     public function handleToolInvoked(object $event): void
@@ -122,22 +130,26 @@ final class LaravelAiEventSubscriber
             return;
         }
 
-        $payload = $this->mapper->toolInvoked($event);
-        $invocationId = $this->invocationId($payload['invocation_id']);
-        $toolInvocationId = $this->invocationId($payload['tool_invocation_id']);
+        try {
+            $payload = $this->mapper->toolInvoked($event);
+            $invocationId = $this->invocationId($payload['invocation_id']);
+            $toolInvocationId = $this->invocationId($payload['tool_invocation_id']);
 
-        if ($invocationId === null || $toolInvocationId === null) {
-            return;
+            if ($invocationId === null || $toolInvocationId === null) {
+                return;
+            }
+
+            $toolSpan = $this->toolSpans[$this->toolKey($invocationId, $toolInvocationId)] ?? null;
+
+            if ($toolSpan === null) {
+                return;
+            }
+
+            $toolSpan->withOutput($payload['output']);
+            $toolSpan->finish(status: SpanStatus::Ok);
+        } catch (Throwable $exception) {
+            report($exception);
         }
-
-        $toolSpan = $this->toolSpans[$this->toolKey($invocationId, $toolInvocationId)] ?? null;
-
-        if ($toolSpan === null) {
-            return;
-        }
-
-        $toolSpan->withOutput($payload['output']);
-        $toolSpan->finish(status: SpanStatus::Ok);
     }
 
     public function handlePrompted(object $event): void

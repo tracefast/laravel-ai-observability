@@ -28,6 +28,43 @@ it('captures prompt text and messages in full content mode', function (): void {
     ]);
 });
 
+it('captures real laravel ai prompt instructions conversation messages and attachments', function (): void {
+    config()->set('ai-observability.capture.content', 'full');
+
+    $payload = (new LaravelAiEventMapper)->prompting(new RealPromptingEvent);
+
+    expect($payload)->toMatchArray([
+        'invocation_id' => 'invocation-real',
+        'name' => 'Real Agent',
+        'input' => [
+            'value' => 'Summarize the uploaded resume.',
+            'instructions' => 'Use the hiring rubric and be direct.',
+            'messages' => [
+                [
+                    'role' => 'assistant',
+                    'content' => 'Previous summary is available.',
+                ],
+                [
+                    'role' => 'user',
+                    'content' => 'Summarize the uploaded resume.',
+                    'attachments' => [
+                        [
+                            'name' => 'resume.pdf',
+                            'mimeType' => 'application/pdf',
+                        ],
+                    ],
+                ],
+            ],
+            'attachments' => [
+                [
+                    'name' => 'resume.pdf',
+                    'mimeType' => 'application/pdf',
+                ],
+            ],
+        ],
+    ]);
+});
+
 it('captures response value tool calls tool results and steps in full content mode', function (): void {
     config()->set('ai-observability.capture.content', 'full');
 
@@ -246,6 +283,73 @@ final class RichPromptingEvent
     public function agent(): RichAgent
     {
         return new RichAgent;
+    }
+}
+
+final class RealAttachment
+{
+    public function __construct(
+        public string $name,
+        public string $mimeType,
+    ) {}
+}
+
+final class RealAgent
+{
+    public string $name = 'Real Agent';
+
+    public string $model = 'gpt-4.1-mini';
+
+    public function instructions(): string
+    {
+        return 'Use the hiring rubric and be direct.';
+    }
+
+    /**
+     * @return list<array{role: string, content: string}>
+     */
+    public function messages(): array
+    {
+        return [
+            [
+                'role' => 'assistant',
+                'content' => 'Previous summary is available.',
+            ],
+        ];
+    }
+
+    public function provider(): string
+    {
+        return 'openai';
+    }
+}
+
+final class RealPrompt
+{
+    public RealAgent $agent;
+
+    /**
+     * @var list<RealAttachment>
+     */
+    public array $attachments;
+
+    public function __construct(
+        public string $prompt = 'Summarize the uploaded resume.',
+    ) {
+        $this->agent = new RealAgent;
+        $this->attachments = [
+            new RealAttachment('resume.pdf', 'application/pdf'),
+        ];
+    }
+}
+
+final class RealPromptingEvent
+{
+    public string $invocationId = 'invocation-real';
+
+    public function prompt(): RealPrompt
+    {
+        return new RealPrompt;
     }
 }
 

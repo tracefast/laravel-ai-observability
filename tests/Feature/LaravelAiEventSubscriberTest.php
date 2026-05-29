@@ -49,6 +49,30 @@ final class ThrowingPromptedEvent
     }
 }
 
+final class ThrowingPromptingEvent
+{
+    public function prompt(): never
+    {
+        throw new RuntimeException('Prompting mapping failed.');
+    }
+}
+
+final class ThrowingInvokingToolEvent
+{
+    public function tool(): never
+    {
+        throw new RuntimeException('Invoking tool mapping failed.');
+    }
+}
+
+final class ThrowingToolInvokedEvent
+{
+    public function invocationId(): never
+    {
+        throw new RuntimeException('Tool invoked mapping failed.');
+    }
+}
+
 it('scopes registry and subscriber instances to the current container scope', function (): void {
     $registry = app(TraceRegistry::class);
     $subscriber = app(LaravelAiEventSubscriber::class);
@@ -194,6 +218,34 @@ it('forgets registry and tool spans when prompted mapping throws after invocatio
     expect($registry->trace('invocation-123'))->toBeNull()
         ->and($registry->rootSpan('invocation-123'))->toBeNull()
         ->and(toolSpans($subscriber))->toBe([]);
+});
+
+it('reports non-terminal handler failures without throwing into application code', function (): void {
+    config()->set('ai-observability.enabled', true);
+
+    $reportedMessages = [];
+    $handler = Mockery::mock(ExceptionHandler::class);
+    $handler
+        ->shouldReceive('report')
+        ->times(3)
+        ->with(Mockery::on(function (Throwable $throwable) use (&$reportedMessages): bool {
+            $reportedMessages[] = $throwable->getMessage();
+
+            return true;
+        }));
+    app()->instance(ExceptionHandler::class, $handler);
+
+    $subscriber = app(LaravelAiEventSubscriber::class);
+
+    $subscriber->handlePrompting(new ThrowingPromptingEvent);
+    $subscriber->handleInvokingTool(new ThrowingInvokingToolEvent);
+    $subscriber->handleToolInvoked(new ThrowingToolInvokedEvent);
+
+    expect($reportedMessages)->toBe([
+        'Prompting mapping failed.',
+        'Invoking tool mapping failed.',
+        'Tool invoked mapping failed.',
+    ]);
 });
 
 it('does nothing while disabled or without invocation ids', function (): void {

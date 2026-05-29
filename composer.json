@@ -46,6 +46,11 @@
     "config": {
         "sort-packages": true
     },
+    "archive": {
+        "exclude": [
+            "/docs/superpowers"
+        ]
+    },
     "minimum-stability": "stable",
     "prefer-stable": true,
     "keywords": [

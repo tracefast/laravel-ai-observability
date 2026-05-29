@@ -12,6 +12,7 @@ use JsonSerializable;
 use ReflectionMethod;
 use Stringable;
 use Tracefast\LaravelAiObservability\Support\Arr;
+use Traversable;
 use UnitEnum;
 
 final class LaravelAiEventMapper
@@ -196,16 +197,48 @@ final class LaravelAiEventMapper
         }
 
         $value = $this->value($prompt, ['input', 'prompt', 'text', 'content', 'message']);
-        $messages = $this->value($prompt, ['messages']);
+        $agent = $this->value($prompt, ['agent']);
+        $instructions = $this->value($prompt, ['instructions']) ?? $this->value($agent, ['instructions']);
+        $attachments = $this->value($prompt, ['attachments']);
+        $messages = $this->promptMessages($prompt, $agent, $value, $attachments, $instructions);
 
-        if ($messages !== null) {
+        if ($instructions !== null || $messages !== null || $attachments !== null) {
             return Arr::withoutNulls([
                 'value' => $this->serializable($value),
+                'instructions' => $this->serializable($instructions),
                 'messages' => $this->serializable($messages),
+                'attachments' => $this->serializable($attachments),
             ]);
         }
 
         return $this->content($prompt) ?? $this->serializable($fallback);
+    }
+
+    private function promptMessages(mixed $prompt, mixed $agent, mixed $value, mixed $attachments, mixed $instructions): mixed
+    {
+        $promptMessages = $this->value($prompt, ['messages']);
+
+        if ($promptMessages !== null) {
+            return $promptMessages;
+        }
+
+        $agentMessages = $this->value($agent, ['messages']);
+
+        if ($agentMessages === null && $attachments === null && $instructions === null) {
+            return null;
+        }
+
+        $messages = $this->list($agentMessages);
+
+        if ($value !== null || $attachments !== null) {
+            $messages[] = Arr::withoutNulls([
+                'role' => 'user',
+                'content' => $value,
+                'attachments' => $attachments,
+            ]);
+        }
+
+        return $messages === [] ? null : $messages;
     }
 
     private function responseOutput(mixed $response, mixed $fallback): mixed
@@ -264,6 +297,22 @@ final class LaravelAiEventMapper
         return $this->stringValue($provider)
             ?? $this->stringValue($this->value($provider, ['name', 'value']))
             ?? (is_object($provider) ? class_basename($provider) : null);
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function list(mixed $value): array
+    {
+        if ($value instanceof Traversable) {
+            return array_values(iterator_to_array($value, false));
+        }
+
+        if (is_array($value)) {
+            return array_values($value);
+        }
+
+        return [];
     }
 
     private function stringValue(mixed $value): ?string
