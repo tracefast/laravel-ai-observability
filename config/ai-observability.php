@@ -1,9 +1,9 @@
 <?php
 
 return [
-    'enabled' => env('AI_OBSERVABILITY_ENABLED', false),
+    'enabled' => env('AI_OBSERVABILITY_ENABLED', true),
 
-    'default' => env('AI_OBSERVABILITY_EXPORTER', 'stack'),
+    'default' => env('AI_OBSERVABILITY_EXPORTER', 'log'),
 
     'capture' => [
         'content' => env('AI_OBSERVABILITY_CAPTURE_CONTENT', 'full'),
