@@ -69,7 +69,7 @@ LANGFUSE_OTEL_AUTHORIZATION="Basic <base64-public-key-colon-secret-key>"
 ```env
 AI_OBSERVABILITY_EXPORTER=braintrust
 BRAINTRUST_API_KEY=<braintrust-api-key>
-BRAINTRUST_PARENT=project_name:nexxa
+BRAINTRUST_PARENT=project_name:<project-name>
 ```
 
 The Braintrust endpoint defaults to `https://api.braintrust.dev/otel/v1/traces`.
