@@ -39,6 +39,12 @@ The default exporter is `stack`, and the default stack sends traces to the `log`
 
 V1 captures full LLM input and output by default. Captured content may include prompts, system messages, tool arguments, tool results, uploaded content, PII, secrets, and sensitive business data.
 
+Make the default explicit when you want full capture:
+
+```env
+AI_OBSERVABILITY_CAPTURE_CONTENT=full
+```
+
 Disable content capture when needed:
 
 ```env
@@ -122,6 +128,8 @@ AI_OBSERVABILITY_DB_CONNECTION=mysql
 ```
 
 Leave `AI_OBSERVABILITY_DB_CONNECTION` empty to use Laravel's default database connection.
+
+The database exporter stores traces and spans only. The published migration creates `ai_observability_traces` and `ai_observability_spans`.
 
 ## Custom Exporters
 
