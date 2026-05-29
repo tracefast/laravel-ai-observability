@@ -22,7 +22,7 @@ final class OtlpEndpoint
     public static function fromConfig(array $config): self
     {
         return new self(
-            self::normalizeUrl(self::configuredEndpoint($config)),
+            self::configuredEndpoint($config),
             self::headers($config),
         );
     }
@@ -35,15 +35,19 @@ final class OtlpEndpoint
         $endpoint = $config['endpoint'] ?? null;
 
         if (is_string($endpoint) && trim($endpoint) !== '') {
-            return trim($endpoint);
+            return self::normalizeUrl(trim($endpoint));
         }
 
-        foreach (['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'OTEL_EXPORTER_OTLP_ENDPOINT'] as $name) {
-            $value = getenv($name);
+        $tracesEndpoint = getenv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT');
 
-            if (is_string($value) && trim($value) !== '') {
-                return trim($value);
-            }
+        if (is_string($tracesEndpoint) && trim($tracesEndpoint) !== '') {
+            return trim($tracesEndpoint);
+        }
+
+        $endpoint = getenv('OTEL_EXPORTER_OTLP_ENDPOINT');
+
+        if (is_string($endpoint) && trim($endpoint) !== '') {
+            return self::normalizeUrl(trim($endpoint));
         }
 
         return self::DEFAULT_URL;
@@ -89,8 +93,8 @@ final class OtlpEndpoint
         foreach (explode(',', $value) as $part) {
             [$key, $headerValue] = array_pad(explode('=', $part, 2), 2, null);
 
-            $key = is_string($key) ? trim($key) : '';
-            $headerValue = is_string($headerValue) ? trim($headerValue) : '';
+            $key = is_string($key) ? trim(urldecode($key)) : '';
+            $headerValue = is_string($headerValue) ? trim(urldecode($headerValue)) : '';
 
             if ($key === '' || $headerValue === '') {
                 continue;

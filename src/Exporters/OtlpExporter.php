@@ -37,7 +37,8 @@ final class OtlpExporter implements Exporter
                 ->withHeaders(array_merge($this->endpoint->headers, [
                     'Content-Type' => 'application/json',
                 ]))
-                ->post($this->endpoint->url, $this->payload($trace));
+                ->post($this->endpoint->url, $this->payload($trace))
+                ->throw();
         } catch (Throwable $throwable) {
             report($throwable);
         }

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
 use Tracefast\LaravelAiObservability\Data\Span;
 use Tracefast\LaravelAiObservability\Data\SpanKind;
@@ -88,6 +90,16 @@ it('prefers traces endpoint env over base endpoint env and preserves traces path
     });
 });
 
+it('preserves traces endpoint env exactly without appending traces path', function (): void {
+    withOtlpEnvironment([
+        'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT' => 'http://collector:4318/custom',
+    ], function (): void {
+        $endpoint = OtlpEndpoint::fromConfig([]);
+
+        expect($endpoint->url)->toBe('http://collector:4318/custom');
+    });
+});
+
 it('merges environment and configured headers while filtering empty values', function (): void {
     withOtlpEnvironment([
         'OTEL_EXPORTER_OTLP_HEADERS' => 'Authorization=Bearer env,x-empty=,x-env=base',
@@ -107,6 +119,24 @@ it('merges environment and configured headers while filtering empty values', fun
             'x-env' => 'base',
             'x-trace' => 'yes',
             'x-config' => 'true',
+        ]);
+    });
+});
+
+it('url decodes environment header names and values', function (): void {
+    withOtlpEnvironment([
+        'OTEL_EXPORTER_OTLP_HEADERS' => 'Authorization=Bearer%20env,x-api%2Dkey=secret%3Dvalue',
+    ], function (): void {
+        $endpoint = OtlpEndpoint::fromConfig([
+            'headers' => [
+                'x-config' => 'literal%20value',
+            ],
+        ]);
+
+        expect($endpoint->headers)->toBe([
+            'Authorization' => 'Bearer env',
+            'x-api-key' => 'secret=value',
+            'x-config' => 'literal%20value',
         ]);
     });
 });
@@ -156,6 +186,21 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
 
         return true;
     });
+});
+
+it('reports non successful otlp http responses without throwing into application code', function (): void {
+    Exceptions::fake();
+
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::response([], 500),
+    ]);
+
+    (new OtlpExporter([
+        'endpoint' => 'https://example.test/otel',
+    ]))->export(otlpTrace());
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://example.test/otel/v1/traces');
+    Exceptions::assertReported(RequestException::class);
 });
 
 it('omits nullable span fields and invalid timestamps from otlp payloads', function (): void {
