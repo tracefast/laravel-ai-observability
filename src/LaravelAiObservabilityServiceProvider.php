@@ -27,9 +27,9 @@ class LaravelAiObservabilityServiceProvider extends PackageServiceProvider
     public function packageRegistered(): void
     {
         $this->app->singleton(ExporterManager::class, fn (Application $app): ExporterManager => new ExporterManager($app));
-        $this->app->singleton(TraceRegistry::class, InMemoryTraceRegistry::class);
-        $this->app->singleton(LaravelAiEventMapper::class);
-        $this->app->singleton(LaravelAiEventSubscriber::class);
+        $this->app->scoped(TraceRegistry::class, InMemoryTraceRegistry::class);
+        $this->app->scoped(LaravelAiEventMapper::class);
+        $this->app->scoped(LaravelAiEventSubscriber::class);
         $this->app->singleton(AiObservability::class, fn (Application $app): AiObservability => new AiObservability(
             $app->make(ExporterManager::class),
         ));

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Events\Dispatcher;
 use Tracefast\LaravelAiObservability\Contracts\Exporter;
 use Tracefast\LaravelAiObservability\Contracts\TraceRegistry;
@@ -35,6 +36,31 @@ final class FailingExporter implements Exporter
         throw new RuntimeException('Exporter failed.');
     }
 }
+
+final class ThrowingPromptedEvent
+{
+    public function __construct(
+        public string $invocationId = 'invocation-123',
+    ) {}
+
+    public function response(): never
+    {
+        throw new RuntimeException('Prompted mapping failed.');
+    }
+}
+
+it('scopes registry and subscriber instances to the current container scope', function (): void {
+    $registry = app(TraceRegistry::class);
+    $subscriber = app(LaravelAiEventSubscriber::class);
+
+    expect(app(TraceRegistry::class))->toBe($registry)
+        ->and(app(LaravelAiEventSubscriber::class))->toBe($subscriber);
+
+    app()->forgetScopedInstances();
+
+    expect(app(TraceRegistry::class))->not->toBe($registry)
+        ->and(app(LaravelAiEventSubscriber::class))->not->toBe($subscriber);
+});
 
 it('subscribes laravel ai lifecycle events to their handlers', function (): void {
     $dispatcher = Mockery::mock(Dispatcher::class);
@@ -144,6 +170,32 @@ it('forgets registry state when the exporter throws', function (): void {
         ->and($registry->rootSpan('invocation-123'))->toBeNull();
 });
 
+it('forgets registry and tool spans when prompted mapping throws after invocation exists', function (): void {
+    config()->set('ai-observability.enabled', true);
+
+    $handler = Mockery::mock(ExceptionHandler::class);
+    $handler
+        ->shouldReceive('report')
+        ->once()
+        ->with(Mockery::on(fn (Throwable $throwable): bool => $throwable->getMessage() === 'Prompted mapping failed.'));
+    app()->instance(ExceptionHandler::class, $handler);
+
+    $subscriber = app(LaravelAiEventSubscriber::class);
+    $registry = app(TraceRegistry::class);
+
+    $subscriber->handlePrompting(new FakePromptingEvent);
+    $subscriber->handleInvokingTool(new FakeInvokingToolEvent);
+
+    expect($registry->trace('invocation-123'))->not->toBeNull()
+        ->and(toolSpans($subscriber))->toHaveCount(1);
+
+    $subscriber->handlePrompted(new ThrowingPromptedEvent);
+
+    expect($registry->trace('invocation-123'))->toBeNull()
+        ->and($registry->rootSpan('invocation-123'))->toBeNull()
+        ->and(toolSpans($subscriber))->toBe([]);
+});
+
 it('does nothing while disabled or without invocation ids', function (): void {
     config()->set('ai-observability.enabled', false);
     config()->set('ai-observability.default', 'capturing');
@@ -176,3 +228,20 @@ it('knows about all laravel ai lifecycle event classes', function (): void {
         'Laravel\\Ai\\Events\\ToolInvoked',
     );
 });
+
+it('throws a controlled exception for unmapped event classes', function (): void {
+    $method = new ReflectionMethod(LaravelAiEventSubscriber::class, 'handlerFor');
+
+    expect(fn (): mixed => $method->invoke(app(LaravelAiEventSubscriber::class), stdClass::class))
+        ->toThrow(LogicException::class, 'No Laravel AI event subscriber handler is mapped for [stdClass].');
+});
+
+/**
+ * @return array<string, mixed>
+ */
+function toolSpans(LaravelAiEventSubscriber $subscriber): array
+{
+    $property = new ReflectionProperty($subscriber, 'toolSpans');
+
+    return $property->getValue($subscriber);
+}

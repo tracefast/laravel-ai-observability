@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tracefast\LaravelAiObservability\LaravelAi;
 
 use Illuminate\Contracts\Events\Dispatcher;
+use LogicException;
 use Throwable;
 use Tracefast\LaravelAiObservability\AiObservability;
 use Tracefast\LaravelAiObservability\Contracts\TraceRegistry;
@@ -17,6 +18,18 @@ use Tracefast\LaravelAiObservability\Support\Ids;
 
 final class LaravelAiEventSubscriber
 {
+    /**
+     * @var array<string, string>
+     */
+    private const Handlers = [
+        'PromptingAgent' => 'handlePrompting',
+        'StreamingAgent' => 'handlePrompting',
+        'AgentPrompted' => 'handlePrompted',
+        'AgentStreamed' => 'handlePrompted',
+        'InvokingTool' => 'handleInvokingTool',
+        'ToolInvoked' => 'handleToolInvoked',
+    ];
+
     /**
      * @var array<string, Span>
      */
@@ -133,23 +146,23 @@ final class LaravelAiEventSubscriber
             return;
         }
 
-        $payload = $this->mapper->prompted($event);
-        $invocationId = $this->invocationId($payload['invocation_id']);
-
-        if ($invocationId === null) {
-            return;
-        }
-
-        $trace = $this->registry->trace($invocationId);
-        $rootSpan = $this->registry->rootSpan($invocationId);
-
-        if ($trace === null || $rootSpan === null) {
-            $this->registry->forget($invocationId);
-
-            return;
-        }
+        $invocationId = $this->invocationIdFromEvent($event);
 
         try {
+            $payload = $this->mapper->prompted($event);
+            $invocationId = $this->invocationId($payload['invocation_id']) ?? $invocationId;
+
+            if ($invocationId === null) {
+                return;
+            }
+
+            $trace = $this->registry->trace($invocationId);
+            $rootSpan = $this->registry->rootSpan($invocationId);
+
+            if ($trace === null || $rootSpan === null) {
+                return;
+            }
+
             $rootSpan->withOutput($payload['output']);
             $rootSpan->withAttributes($payload['attributes']);
             $rootSpan->finish(status: SpanStatus::Ok);
@@ -159,19 +172,19 @@ final class LaravelAiEventSubscriber
         } catch (Throwable $exception) {
             report($exception);
         } finally {
-            $this->registry->forget($invocationId);
-            $this->forgetToolSpans($invocationId);
+            if ($invocationId !== null) {
+                $this->registry->forget($invocationId);
+                $this->forgetToolSpans($invocationId);
+            }
         }
     }
 
     private function handlerFor(string $event): string
     {
-        return match (class_basename($event)) {
-            'PromptingAgent', 'StreamingAgent' => 'handlePrompting',
-            'AgentPrompted', 'AgentStreamed' => 'handlePrompted',
-            'InvokingTool' => 'handleInvokingTool',
-            'ToolInvoked' => 'handleToolInvoked',
-        };
+        $eventName = class_basename($event);
+
+        return self::Handlers[$eventName]
+            ?? throw new LogicException("No Laravel AI event subscriber handler is mapped for [{$eventName}].");
     }
 
     private function invocationId(?string $value): ?string
@@ -181,6 +194,19 @@ final class LaravelAiEventSubscriber
         }
 
         return $value;
+    }
+
+    private function invocationIdFromEvent(object $event): ?string
+    {
+        $properties = get_object_vars($event);
+
+        foreach (['invocationId', 'invocation_id'] as $property) {
+            if (array_key_exists($property, $properties)) {
+                return is_string($properties[$property]) ? $this->invocationId($properties[$property]) : null;
+            }
+        }
+
+        return null;
     }
 
     private function toolKey(string $invocationId, string $toolInvocationId): string
