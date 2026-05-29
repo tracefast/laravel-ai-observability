@@ -48,7 +48,9 @@
     },
     "archive": {
         "exclude": [
-            "/docs/superpowers"
+            "/docs/superpowers",
+            "/vendor",
+            "/composer.lock"
         ]
     },
     "minimum-stability": "stable",
