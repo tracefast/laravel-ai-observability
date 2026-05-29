@@ -180,12 +180,18 @@ final class ExporterManager
             return [$name];
         }
 
-        return array_values(array_filter(
-            array_map(
-                fn (string $channel): string => trim($channel),
-                explode(',', $name),
-            ),
-            fn (string $channel): bool => $channel !== '',
-        ));
+        $channels = [];
+
+        foreach (explode(',', $name) as $channel) {
+            $channel = trim($channel);
+
+            if ($channel === '') {
+                throw new InvalidArgumentException("Exporter list [{$name}] contains an empty exporter name.");
+            }
+
+            $channels[] = $channel;
+        }
+
+        return $channels;
     }
 }

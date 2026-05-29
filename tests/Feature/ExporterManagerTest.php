@@ -33,6 +33,15 @@ it('trims comma separated exporter names', function (): void {
     expect(app(ExporterManager::class)->exporter(' null , log '))->toBeInstanceOf(StackExporter::class);
 });
 
+it('rejects empty comma separated exporter names', function (string $exporters): void {
+    expect(fn () => app(ExporterManager::class)->exporter($exporters))
+        ->toThrow(InvalidArgumentException::class, "Exporter list [{$exporters}] contains an empty exporter name.");
+})->with([
+    'trailing comma' => 'log,',
+    'leading comma' => ',log',
+    'double comma' => 'phoenix,,langfuse',
+]);
+
 it('exports comma separated exporters to each resolved exporter', function (): void {
     config()->set('ai-observability.exporters.first', ['driver' => 'capturing']);
     config()->set('ai-observability.exporters.second', ['driver' => 'capturing']);
