@@ -52,6 +52,10 @@ it('maps prompting events into root agent span fields', function (): void {
             'tracefast.ai.invocation_id' => 'invocation-123',
             'llm.provider' => 'openai',
             'llm.model_name' => 'gpt-4.1-mini',
+            'gen_ai.operation.name' => 'chat',
+            'gen_ai.provider.name' => 'openai',
+            'gen_ai.request.model' => 'gpt-4.1-mini',
+            'gen_ai.prompt' => 'Summarize this candidate.',
         ],
     ]);
 });
@@ -67,6 +71,11 @@ it('maps prompted events with response output and usage fields', function (): vo
             'llm.model_name' => 'gpt-4.1-mini',
             'llm.token_count.prompt' => 17,
             'llm.token_count.completion' => 8,
+            'gen_ai.provider.name' => 'openai',
+            'gen_ai.response.model' => 'gpt-4.1-mini',
+            'gen_ai.completion' => 'The candidate is a strong fit.',
+            'gen_ai.usage.input_tokens' => 17,
+            'gen_ai.usage.output_tokens' => 8,
             'tracefast.ai.conversation_id' => 'conversation-456',
             'tracefast.ai.response_type' => 'text',
         ],

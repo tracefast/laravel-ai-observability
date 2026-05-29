@@ -25,6 +25,7 @@ final class LaravelAiEventMapper
     public function prompting(object $event): array
     {
         $prompt = $this->value($event, ['prompt']);
+        $eventInput = $this->value($event, ['input']);
         $agent = $this->value($event, ['agent']) ?? $this->value($prompt, ['agent']);
         $invocationId = $this->stringValue(
             $this->value($event, ['invocationId', 'invocation_id'])
@@ -40,16 +41,21 @@ final class LaravelAiEventMapper
                 ?? $this->value($prompt, ['model', 'modelName', 'model_name'])
                 ?? $this->value($agent, ['model', 'modelName', 'model_name'])
         );
+        $promptText = $this->promptText($prompt, $eventInput);
 
         return [
             'invocation_id' => $invocationId,
             'name' => $this->name($event, $agent, 'agent'),
-            'input' => $this->promptInput($prompt, $this->value($event, ['input'])),
+            'input' => $this->promptInput($prompt, $eventInput),
             'attributes' => Arr::withoutNulls([
                 'openinference.span.kind' => 'agent',
                 'tracefast.ai.invocation_id' => $invocationId,
                 'llm.provider' => $provider,
                 'llm.model_name' => $model,
+                'gen_ai.operation.name' => $invocationId !== null ? 'chat' : null,
+                'gen_ai.provider.name' => $provider,
+                'gen_ai.request.model' => $model,
+                'gen_ai.prompt' => $promptText,
             ]),
         ];
     }
@@ -66,6 +72,20 @@ final class LaravelAiEventMapper
             ?? $this->value($response, ['agent']);
         $usage = $this->value($event, ['usage']) ?? $this->value($response, ['usage']);
         $meta = $this->value($event, ['meta']) ?? $this->value($response, ['meta']);
+        $provider = $this->providerName(
+            $this->value($event, ['provider'])
+                ?? $this->value($meta, ['provider'])
+                ?? $this->value($prompt, ['provider'])
+                ?? $this->value($agent, ['provider'])
+        );
+        $model = $this->stringValue(
+            $this->value($event, ['model', 'modelName', 'model_name'])
+                ?? $this->value($meta, ['model', 'modelName', 'model_name'])
+                ?? $this->value($prompt, ['model', 'modelName', 'model_name'])
+                ?? $this->value($agent, ['model', 'modelName', 'model_name'])
+        );
+        $promptTokens = $this->value($usage, ['promptTokens', 'prompt_tokens', 'inputTokens', 'input_tokens']);
+        $completionTokens = $this->value($usage, ['completionTokens', 'completion_tokens', 'outputTokens', 'output_tokens']);
         $responseType = $this->stringValue($this->value($event, ['responseType', 'response_type', 'type']) ?? $this->value($response, ['responseType', 'response_type', 'type']))
             ?? (is_object($response) ? class_basename($response) : null);
 
@@ -77,20 +97,15 @@ final class LaravelAiEventMapper
             ),
             'output' => $this->responseOutput($response, $this->value($event, ['output'])),
             'attributes' => Arr::withoutNulls([
-                'llm.provider' => $this->providerName(
-                    $this->value($event, ['provider'])
-                        ?? $this->value($meta, ['provider'])
-                        ?? $this->value($prompt, ['provider'])
-                        ?? $this->value($agent, ['provider'])
-                ),
-                'llm.model_name' => $this->stringValue(
-                    $this->value($event, ['model', 'modelName', 'model_name'])
-                        ?? $this->value($meta, ['model', 'modelName', 'model_name'])
-                        ?? $this->value($prompt, ['model', 'modelName', 'model_name'])
-                        ?? $this->value($agent, ['model', 'modelName', 'model_name'])
-                ),
-                'llm.token_count.prompt' => $this->value($usage, ['promptTokens', 'prompt_tokens', 'inputTokens', 'input_tokens']),
-                'llm.token_count.completion' => $this->value($usage, ['completionTokens', 'completion_tokens', 'outputTokens', 'output_tokens']),
+                'llm.provider' => $provider,
+                'llm.model_name' => $model,
+                'llm.token_count.prompt' => $promptTokens,
+                'llm.token_count.completion' => $completionTokens,
+                'gen_ai.provider.name' => $provider,
+                'gen_ai.response.model' => $model,
+                'gen_ai.completion' => $this->responseText($response, $this->value($event, ['output'])),
+                'gen_ai.usage.input_tokens' => $promptTokens,
+                'gen_ai.usage.output_tokens' => $completionTokens,
                 'tracefast.ai.conversation_id' => $this->stringValue(
                     $this->value($event, ['conversationId', 'conversation_id'])
                         ?? $this->value($response, ['conversationId', 'conversation_id'])
@@ -241,6 +256,18 @@ final class LaravelAiEventMapper
         return $messages === [] ? null : $messages;
     }
 
+    private function promptText(mixed $prompt, mixed $fallback): ?string
+    {
+        if (! $this->capturesContent()) {
+            return null;
+        }
+
+        return $this->stringValue(
+            $this->value($prompt, ['input', 'prompt', 'text', 'content', 'message'])
+                ?? $fallback
+        );
+    }
+
     private function responseOutput(mixed $response, mixed $fallback): mixed
     {
         if (! $this->capturesContent()) {
@@ -261,6 +288,18 @@ final class LaravelAiEventMapper
         }
 
         return $this->content($response) ?? $this->serializable($fallback);
+    }
+
+    private function responseText(mixed $response, mixed $fallback): ?string
+    {
+        if (! $this->capturesContent()) {
+            return null;
+        }
+
+        return $this->stringValue(
+            $this->value($response, ['output', 'text', 'content', 'message', 'result'])
+                ?? $fallback
+        );
     }
 
     private function captured(mixed $value): mixed
