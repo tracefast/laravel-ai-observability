@@ -21,8 +21,6 @@ final class OtlpExporter implements Exporter
 
     private readonly float $timeout;
 
-    private readonly ?string $preset;
-
     /**
      * @param  array<string, mixed>  $config
      */
@@ -30,7 +28,6 @@ final class OtlpExporter implements Exporter
     {
         $this->endpoint = OtlpEndpoint::fromConfig($config);
         $this->timeout = $this->timeout($config['timeout'] ?? null);
-        $this->preset = $this->preset($config['preset'] ?? null);
     }
 
     public function export(Trace $trace): void
@@ -119,12 +116,6 @@ final class OtlpExporter implements Exporter
                 ];
             }
 
-            foreach ($this->presetAttributeAliases($sourceAttributes) as $key => $value) {
-                $attributes[] = [
-                    'key' => $key,
-                    'value' => $this->attributeValue($value),
-                ];
-            }
         }
 
         foreach (['input' => 'input.value', 'output' => 'output.value'] as $source => $key) {
@@ -215,31 +206,5 @@ final class OtlpExporter implements Exporter
         }
 
         return (float) config('ai-observability.export.timeout', 2.0);
-    }
-
-    private function preset(mixed $preset): ?string
-    {
-        if (! is_string($preset) || trim($preset) === '') {
-            return null;
-        }
-
-        return strtolower(trim($preset));
-    }
-
-    /**
-     * @param  array<string, mixed>  $attributes
-     * @return array<string, mixed>
-     */
-    private function presetAttributeAliases(array $attributes): array
-    {
-        if ($this->preset !== 'braintrust') {
-            return [];
-        }
-
-        return Arr::withoutNulls([
-            'braintrust.metadata.session_id' => $attributes['session.id'] ?? null,
-            'braintrust.metadata.user_id' => $attributes['user.id'] ?? null,
-            'braintrust.metadata.conversation_id' => $attributes['tracefast.ai.conversation_id'] ?? null,
-        ]);
     }
 }

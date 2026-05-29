@@ -30,6 +30,9 @@ function otlpTrace(): Trace
         startedAt: '2026-01-01T00:00:00.123456Z',
         attributes: [
             'llm.model_name' => 'gpt-4.1',
+            'session.id' => 'candidate-coach-123',
+            'user.id' => '42',
+            'tracefast.ai.conversation_id' => 'candidate-coach-123',
             'empty.value' => null,
         ],
         input: ['messages' => [['role' => 'user', 'content' => 'Hello']]],
@@ -176,71 +179,24 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
                 'value' => ['stringValue' => 'gpt-4.1'],
             ])
             ->and($span['attributes'])->toContain([
+                'key' => 'session.id',
+                'value' => ['stringValue' => 'candidate-coach-123'],
+            ])
+            ->and($span['attributes'])->toContain([
+                'key' => 'user.id',
+                'value' => ['stringValue' => '42'],
+            ])
+            ->and($span['attributes'])->toContain([
+                'key' => 'tracefast.ai.conversation_id',
+                'value' => ['stringValue' => 'candidate-coach-123'],
+            ])
+            ->and($span['attributes'])->toContain([
                 'key' => 'input.value',
                 'value' => ['stringValue' => '{"messages":[{"role":"user","content":"Hello"}]}'],
             ])
             ->and($span['attributes'])->toContain([
                 'key' => 'output.value',
                 'value' => ['stringValue' => '{"content":"Hi there"}'],
-            ]);
-
-        return true;
-    });
-});
-
-it('duplicates standard session attributes into braintrust metadata for the braintrust preset', function (): void {
-    Http::fake([
-        'https://example.test/otel/v1/traces' => Http::response([], 200),
-    ]);
-
-    $trace = new Trace(
-        traceId: '0123456789abcdef0123456789abcdef',
-        name: 'chat request',
-        startedAt: '2026-01-01T00:00:00.123456Z',
-    );
-
-    $trace->addSpan((new Span(
-        traceId: '0123456789abcdef0123456789abcdef',
-        spanId: '0123456789abcdef',
-        parentSpanId: null,
-        name: 'llm completion',
-        kind: SpanKind::Llm,
-        status: SpanStatus::Ok,
-        startedAt: '2026-01-01T00:00:00.123456Z',
-        attributes: [
-            'session.id' => 'candidate-coach-123',
-            'user.id' => '42',
-            'tracefast.ai.conversation_id' => 'candidate-coach-123',
-        ],
-    ))->finish(
-        endedAt: '2026-01-01T00:00:01.654321Z',
-        status: SpanStatus::Ok,
-    ));
-
-    (new OtlpExporter([
-        'preset' => 'braintrust',
-        'endpoint' => 'https://example.test/otel/v1/traces',
-    ]))->export($trace);
-
-    Http::assertSent(function ($request): bool {
-        $attributes = $request->data()['resourceSpans'][0]['scopeSpans'][0]['spans'][0]['attributes'];
-
-        expect($attributes)
-            ->toContain([
-                'key' => 'session.id',
-                'value' => ['stringValue' => 'candidate-coach-123'],
-            ])
-            ->toContain([
-                'key' => 'braintrust.metadata.session_id',
-                'value' => ['stringValue' => 'candidate-coach-123'],
-            ])
-            ->toContain([
-                'key' => 'braintrust.metadata.user_id',
-                'value' => ['stringValue' => '42'],
-            ])
-            ->toContain([
-                'key' => 'braintrust.metadata.conversation_id',
-                'value' => ['stringValue' => 'candidate-coach-123'],
             ]);
 
         return true;
