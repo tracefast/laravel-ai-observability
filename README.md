@@ -33,7 +33,7 @@ AI_OBSERVABILITY_EXPORT_MODE=defer
 AI_OBSERVABILITY_EXPORT_TIMEOUT=2.0
 ```
 
-The default exporter is `stack`, and the default stack sends traces to the `log` exporter.
+The default exporter is `stack`, and the default stack sends traces to the `log` exporter. `AI_OBSERVABILITY_EXPORT_MODE` accepts `defer` or `sync`; the default `defer` mode uses Laravel deferred functions so export work runs after the response when Laravel can defer it.
 
 ## Content Capture Warning
 

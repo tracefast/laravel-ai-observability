@@ -168,7 +168,7 @@ final class LaravelAiEventSubscriber
             $rootSpan->finish(status: SpanStatus::Ok);
             $trace->finish(status: SpanStatus::Ok);
 
-            $this->observability->exporter()->export($trace);
+            $this->observability->export($trace);
         } catch (Throwable $exception) {
             report($exception);
         } finally {

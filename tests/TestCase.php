@@ -9,6 +9,13 @@ use Tracefast\LaravelAiObservability\LaravelAiObservabilityServiceProvider;
 
 abstract class TestCase extends Orchestra
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutDefer();
+    }
+
     /**
      * @return array<int, class-string>
      */
