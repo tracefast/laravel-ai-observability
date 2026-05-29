@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Laravel\Ai\Messages\AssistantMessage;
+use Laravel\Ai\Messages\Message;
 use Tracefast\LaravelAiObservability\LaravelAi\LaravelAiEventMapper;
 
 it('captures prompt text and messages in full content mode', function (): void {
@@ -28,6 +30,10 @@ it('captures prompt text and messages in full content mode', function (): void {
             'gen_ai.provider.name' => 'anthropic',
             'gen_ai.request.model' => 'claude-4-sonnet',
             'gen_ai.prompt' => 'Summarize the latest interview notes.',
+            'gen_ai.prompt_json' => json_encode([
+                ['role' => 'system', 'content' => 'Be concise.'],
+                ['role' => 'user', 'content' => 'Summarize the latest interview notes.'],
+            ], JSON_THROW_ON_ERROR),
         ],
     ]);
 });
@@ -66,6 +72,18 @@ it('captures real laravel ai prompt instructions conversation messages and attac
                 ],
             ],
         ],
+    ]);
+});
+
+it('normalizes laravel ai message objects into genai prompt json', function (): void {
+    config()->set('ai-observability.capture.content', 'full');
+
+    $payload = (new LaravelAiEventMapper)->prompting(new ObjectMessagePromptingEvent);
+    $messages = json_decode($payload['attributes']['gen_ai.prompt_json'], true, flags: JSON_THROW_ON_ERROR);
+
+    expect($messages)->toBe([
+        ['role' => 'assistant', 'content' => 'Previous summary is available.'],
+        ['role' => 'user', 'content' => 'Summarize the uploaded resume.'],
     ]);
 });
 
@@ -366,6 +384,54 @@ final class RealPromptingEvent
     public function prompt(): RealPrompt
     {
         return new RealPrompt;
+    }
+}
+
+final class ObjectMessageAgent
+{
+    public string $name = 'Object Message Agent';
+
+    public string $model = 'gpt-4.1-mini';
+
+    /**
+     * @return list<Message>
+     */
+    public function messages(): array
+    {
+        return [
+            new AssistantMessage('Previous summary is available.'),
+        ];
+    }
+
+    public function provider(): string
+    {
+        return 'openai';
+    }
+
+    public function instructions(): string
+    {
+        return 'Be direct.';
+    }
+}
+
+final class ObjectMessagePrompt
+{
+    public ObjectMessageAgent $agent;
+
+    public function __construct(
+        public string $prompt = 'Summarize the uploaded resume.',
+    ) {
+        $this->agent = new ObjectMessageAgent;
+    }
+}
+
+final class ObjectMessagePromptingEvent
+{
+    public string $invocationId = 'invocation-object-message';
+
+    public function prompt(): ObjectMessagePrompt
+    {
+        return new ObjectMessagePrompt;
     }
 }
 

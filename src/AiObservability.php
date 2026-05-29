@@ -6,6 +6,7 @@ namespace Tracefast\LaravelAiObservability;
 
 use Closure;
 use Throwable;
+use Tracefast\LaravelAiObservability\Context\ObservationContext;
 use Tracefast\LaravelAiObservability\Contracts\Exporter;
 use Tracefast\LaravelAiObservability\Data\Trace;
 use Tracefast\LaravelAiObservability\Exporters\ExporterManager;
@@ -16,6 +17,7 @@ class AiObservability
 {
     public function __construct(
         private readonly ExporterManager $exporters,
+        private readonly ObservationContext $context,
     ) {}
 
     public function enabled(): bool
@@ -53,6 +55,35 @@ class AiObservability
     public function extend(string $driver, Closure $creator): void
     {
         $this->exporters->extend($driver, $creator);
+    }
+
+    /**
+     * @template TReturn
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  Closure(): TReturn  $callback
+     * @return TReturn
+     */
+    public function withAttributes(array $attributes, Closure $callback): mixed
+    {
+        return $this->context->withAttributes($attributes, $callback);
+    }
+
+    /**
+     * @template TReturn
+     *
+     * @param  Closure(): TReturn  $callback
+     * @param  array<string, mixed>  $attributes
+     * @return TReturn
+     */
+    public function withSession(string $sessionId, Closure $callback, string|int|null $userId = null, array $attributes = []): mixed
+    {
+        $scoped = array_merge($attributes, [
+            'session.id' => $sessionId,
+            'user.id' => $userId,
+        ]);
+
+        return $this->withAttributes($scoped, $callback);
     }
 
     private function exportMode(): string

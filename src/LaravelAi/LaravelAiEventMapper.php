@@ -11,6 +11,7 @@ use Illuminate\Contracts\Support\Arrayable;
 use JsonSerializable;
 use ReflectionMethod;
 use Stringable;
+use Tracefast\LaravelAiObservability\Context\ObservationContext;
 use Tracefast\LaravelAiObservability\Support\Arr;
 use Traversable;
 use UnitEnum;
@@ -18,6 +19,10 @@ use UnitEnum;
 final class LaravelAiEventMapper
 {
     private const MaxSanitizationDepth = 8;
+
+    public function __construct(
+        private readonly ?ObservationContext $context = null,
+    ) {}
 
     /**
      * @return array{invocation_id: ?string, name: string, input: mixed, attributes: array<string, mixed>}
@@ -42,12 +47,13 @@ final class LaravelAiEventMapper
                 ?? $this->value($agent, ['model', 'modelName', 'model_name'])
         );
         $promptText = $this->promptText($prompt, $eventInput);
+        $promptMessages = $this->promptJson($prompt, $agent, $eventInput);
 
         return [
             'invocation_id' => $invocationId,
             'name' => $this->name($event, $agent, 'agent'),
             'input' => $this->promptInput($prompt, $eventInput),
-            'attributes' => Arr::withoutNulls([
+            'attributes' => $this->attributes([
                 'openinference.span.kind' => 'agent',
                 'tracefast.ai.invocation_id' => $invocationId,
                 'llm.provider' => $provider,
@@ -56,6 +62,7 @@ final class LaravelAiEventMapper
                 'gen_ai.provider.name' => $provider,
                 'gen_ai.request.model' => $model,
                 'gen_ai.prompt' => $promptText,
+                'gen_ai.prompt_json' => $promptMessages,
             ]),
         ];
     }
@@ -96,7 +103,7 @@ final class LaravelAiEventMapper
                     ?? $this->value($prompt, ['invocationId', 'invocation_id'])
             ),
             'output' => $this->responseOutput($response, $this->value($event, ['output'])),
-            'attributes' => Arr::withoutNulls([
+            'attributes' => $this->attributes([
                 'llm.provider' => $provider,
                 'llm.model_name' => $model,
                 'llm.token_count.prompt' => $promptTokens,
@@ -129,7 +136,7 @@ final class LaravelAiEventMapper
             'tool_invocation_id' => $toolInvocationId,
             'name' => $name,
             'input' => $this->captured($this->value($event, ['arguments', 'args', 'input'])),
-            'attributes' => Arr::withoutNulls([
+            'attributes' => $this->attributes([
                 'openinference.span.kind' => 'tool',
                 'tool.name' => $name,
                 'tool.call.id' => $toolInvocationId,
@@ -256,6 +263,25 @@ final class LaravelAiEventMapper
         return $messages === [] ? null : $messages;
     }
 
+    private function promptJson(mixed $prompt, mixed $agent, mixed $fallback): ?string
+    {
+        if (! $this->capturesContent()) {
+            return null;
+        }
+
+        $value = $this->value($prompt, ['input', 'prompt', 'text', 'content', 'message']);
+        $attachments = $this->value($prompt, ['attachments']);
+        $instructions = $this->value($prompt, ['instructions']) ?? $this->value($agent, ['instructions']);
+        $messages = $this->promptMessages($prompt, $agent, $value ?? $fallback, $attachments, $instructions);
+        $messages = $this->normalizedMessages($messages);
+
+        if ($messages === []) {
+            return null;
+        }
+
+        return json_encode($messages, JSON_THROW_ON_ERROR);
+    }
+
     private function promptText(mixed $prompt, mixed $fallback): ?string
     {
         if (! $this->capturesContent()) {
@@ -311,6 +337,42 @@ final class LaravelAiEventMapper
         return $this->serializable($value);
     }
 
+    /**
+     * @return list<array{role: string, content: string}>
+     */
+    private function normalizedMessages(mixed $messages): array
+    {
+        $normalized = [];
+
+        foreach ($this->list($messages) as $message) {
+            $role = $this->stringValue($this->value($message, ['role']) ?? (is_array($message) ? ($message['role'] ?? null) : null));
+            $content = $this->stringValue($this->value($message, ['content']) ?? (is_array($message) ? ($message['content'] ?? null) : null));
+
+            if ($role === null || $content === null) {
+                continue;
+            }
+
+            $normalized[] = [
+                'role' => $role,
+                'content' => $content,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function attributes(array $attributes): array
+    {
+        return array_merge(
+            Arr::withoutNulls($attributes),
+            $this->context?->attributes() ?? [],
+        );
+    }
+
     private function capturesContent(): bool
     {
         return config('ai-observability.capture.content', 'full') !== 'off';
@@ -362,6 +424,14 @@ final class LaravelAiEventMapper
 
         if (is_string($value)) {
             return $value;
+        }
+
+        if ($value instanceof BackedEnum) {
+            return (string) $value->value;
+        }
+
+        if ($value instanceof UnitEnum) {
+            return $value->name;
         }
 
         if (is_int($value) || is_float($value) || is_bool($value)) {

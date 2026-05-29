@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Tracefast\LaravelAiObservability\Context\ObservationContext;
 use Tracefast\LaravelAiObservability\Data\Span;
 use Tracefast\LaravelAiObservability\Data\SpanKind;
 use Tracefast\LaravelAiObservability\Data\Trace;
@@ -80,6 +81,28 @@ it('maps prompted events with response output and usage fields', function (): vo
             'tracefast.ai.response_type' => 'text',
         ],
     ]);
+});
+
+it('adds scoped observation attributes to mapped agent and tool spans', function (): void {
+    $context = new ObservationContext;
+
+    $context->withAttributes([
+        'session.id' => 'conversation-123',
+        'user.id' => 42,
+    ], function () use ($context): void {
+        $mapper = new LaravelAiEventMapper($context);
+
+        expect($mapper->prompting(new FakePromptingEvent)['attributes'])->toMatchArray([
+            'session.id' => 'conversation-123',
+            'user.id' => '42',
+        ])->and($mapper->prompted(new FakePromptedEvent)['attributes'])->toMatchArray([
+            'session.id' => 'conversation-123',
+            'user.id' => '42',
+        ])->and($mapper->invokingTool(new FakeInvokingToolEvent)['attributes'])->toMatchArray([
+            'session.id' => 'conversation-123',
+            'user.id' => '42',
+        ]);
+    });
 });
 
 it('falls back to the response class basename when response type is not explicit', function (): void {

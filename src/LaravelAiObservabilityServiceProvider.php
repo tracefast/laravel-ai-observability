@@ -8,6 +8,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Tracefast\LaravelAiObservability\Context\ObservationContext;
 use Tracefast\LaravelAiObservability\Contracts\TraceRegistry;
 use Tracefast\LaravelAiObservability\Exporters\ExporterManager;
 use Tracefast\LaravelAiObservability\LaravelAi\LaravelAiEventMapper;
@@ -27,11 +28,13 @@ class LaravelAiObservabilityServiceProvider extends PackageServiceProvider
     public function packageRegistered(): void
     {
         $this->app->singleton(ExporterManager::class, fn (Application $app): ExporterManager => new ExporterManager($app));
+        $this->app->scoped(ObservationContext::class);
         $this->app->scoped(TraceRegistry::class, InMemoryTraceRegistry::class);
         $this->app->scoped(LaravelAiEventMapper::class);
         $this->app->scoped(LaravelAiEventSubscriber::class);
-        $this->app->singleton(AiObservability::class, fn (Application $app): AiObservability => new AiObservability(
+        $this->app->scoped(AiObservability::class, fn (Application $app): AiObservability => new AiObservability(
             $app->make(ExporterManager::class),
+            $app->make(ObservationContext::class),
         ));
         $this->app->alias(AiObservability::class, 'ai-observability');
     }
