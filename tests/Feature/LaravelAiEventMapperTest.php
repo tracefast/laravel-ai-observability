@@ -9,7 +9,9 @@ use Tracefast\LaravelAiObservability\LaravelAi\EventClassMap;
 use Tracefast\LaravelAiObservability\LaravelAi\LaravelAiEventMapper;
 use Tracefast\LaravelAiObservability\Registry\InMemoryTraceRegistry;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeInvokingToolEvent;
+use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeNestedToolOutput;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakePromptedEvent;
+use Tracefast\LaravelAiObservability\Tests\Fixtures\FakePromptedEventWithoutResponseType;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakePromptingEvent;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeToolInvokedEvent;
 
@@ -71,6 +73,12 @@ it('maps prompted events with response output and usage fields', function (): vo
     ]);
 });
 
+it('falls back to the response class basename when response type is not explicit', function (): void {
+    $payload = (new LaravelAiEventMapper)->prompted(new FakePromptedEventWithoutResponseType);
+
+    expect($payload['attributes']['tracefast.ai.response_type'])->toBe('FakeResponseWithoutType');
+});
+
 it('maps tool invocation arguments and results', function (): void {
     $mapper = new LaravelAiEventMapper;
 
@@ -89,6 +97,27 @@ it('maps tool invocation arguments and results', function (): void {
         'tool_invocation_id' => 'tool-call-789',
         'output' => ['name' => 'Ada Lovelace'],
     ]);
+});
+
+it('sanitizes nested mixed tool output for json encoding', function (): void {
+    $resource = fopen('php://memory', 'r');
+
+    $payload = (new LaravelAiEventMapper)->toolInvoked(new FakeToolInvokedEvent(result: [
+        'plain' => 'value',
+        'nested' => [
+            'object' => new FakeNestedToolOutput('Ada Lovelace', (object) ['role' => 'engineer']),
+            'closure' => fn (): bool => true,
+            'resource' => $resource,
+        ],
+    ]));
+
+    expect(json_encode($payload, JSON_THROW_ON_ERROR))->toBeString()
+        ->and($payload['output']['nested']['object'])->toMatchArray([
+            'name' => 'Ada Lovelace',
+            'nested' => ['role' => 'engineer'],
+        ])
+        ->and($payload['output']['nested']['closure'])->toBe('[closure]')
+        ->and($payload['output']['nested']['resource'])->toStartWith('[resource:');
 });
 
 it('maps null-like events without crashing', function (): void {

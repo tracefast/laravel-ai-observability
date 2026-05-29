@@ -4,13 +4,20 @@ declare(strict_types=1);
 
 namespace Tracefast\LaravelAiObservability\LaravelAi;
 
+use BackedEnum;
+use Closure;
+use DateTimeInterface;
 use Illuminate\Contracts\Support\Arrayable;
 use JsonSerializable;
 use ReflectionMethod;
+use Stringable;
 use Tracefast\LaravelAiObservability\Support\Arr;
+use UnitEnum;
 
 final class LaravelAiEventMapper
 {
+    private const MaxSanitizationDepth = 8;
+
     /**
      * @return array{invocation_id: ?string, name: string, input: mixed, attributes: array<string, mixed>}
      */
@@ -58,6 +65,8 @@ final class LaravelAiEventMapper
             ?? $this->value($response, ['agent']);
         $usage = $this->value($event, ['usage']) ?? $this->value($response, ['usage']);
         $meta = $this->value($event, ['meta']) ?? $this->value($response, ['meta']);
+        $responseType = $this->stringValue($this->value($event, ['responseType', 'response_type', 'type']) ?? $this->value($response, ['responseType', 'response_type', 'type']))
+            ?? (is_object($response) ? class_basename($response) : null);
 
         return [
             'invocation_id' => $this->stringValue(
@@ -85,7 +94,7 @@ final class LaravelAiEventMapper
                     $this->value($event, ['conversationId', 'conversation_id'])
                         ?? $this->value($response, ['conversationId', 'conversation_id'])
                 ),
-                'tracefast.ai.response_type' => $this->stringValue($this->value($event, ['responseType', 'response_type', 'type']) ?? $this->value($response, ['responseType', 'response_type', 'type'])),
+                'tracefast.ai.response_type' => $responseType,
             ]),
         ];
     }
@@ -223,20 +232,84 @@ final class LaravelAiEventMapper
         return null;
     }
 
-    private function serializable(mixed $value): mixed
+    /**
+     * @param  array<int, true>  $seen
+     */
+    private function serializable(mixed $value, int $depth = 0, array $seen = []): mixed
     {
+        if ($depth >= self::MaxSanitizationDepth) {
+            return '[max-depth]';
+        }
+
+        if ($value === null || is_scalar($value)) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            $sanitized = [];
+
+            foreach ($value as $key => $item) {
+                $sanitized[$key] = $this->serializable($item, $depth + 1, $seen);
+            }
+
+            return $sanitized;
+        }
+
+        if (is_resource($value)) {
+            return sprintf('[resource:%s]', get_resource_type($value));
+        }
+
+        if ($value instanceof Closure) {
+            return '[closure]';
+        }
+
+        if ($value instanceof BackedEnum) {
+            return $value->value;
+        }
+
+        if ($value instanceof UnitEnum) {
+            return $value->name;
+        }
+
+        if ($value instanceof DateTimeInterface) {
+            return $value->format(DateTimeInterface::ATOM);
+        }
+
         if ($value instanceof Arrayable) {
-            return $value->toArray();
+            return $this->serializable($value->toArray(), $depth + 1, $seen);
         }
 
         if ($value instanceof JsonSerializable) {
-            return $value->jsonSerialize();
+            return $this->serializable($value->jsonSerialize(), $depth + 1, $seen);
         }
 
-        if (is_object($value) && method_exists($value, '__toString')) {
+        if ($value instanceof Stringable) {
             return (string) $value;
         }
 
-        return $value;
+        if (is_object($value)) {
+            $objectId = spl_object_id($value);
+
+            if (isset($seen[$objectId])) {
+                return ['class' => class_basename($value), 'recursive' => true];
+            }
+
+            $properties = get_object_vars($value);
+
+            if ($properties === []) {
+                return ['class' => class_basename($value)];
+            }
+
+            $seen[$objectId] = true;
+            $sanitized = [];
+
+            foreach ($properties as $key => $property) {
+                $sanitized[$key] = $this->serializable($property, $depth + 1, $seen);
+            }
+
+            return $sanitized;
+        }
+
+        return null;
     }
 }

@@ -37,6 +37,14 @@ final class FakeResponse
     ) {}
 }
 
+final class FakeResponseWithoutType
+{
+    public function __construct(
+        public string $output,
+        public FakeUsage $usage,
+    ) {}
+}
+
 final class FakePromptingEvent
 {
     public FakePrompt $prompt;
@@ -74,6 +82,26 @@ final class FakePromptedEvent
     }
 }
 
+final class FakePromptedEventWithoutResponseType
+{
+    public FakeAgent $agent;
+
+    public function __construct(
+        public string $invocationId = 'invocation-123',
+        public string $conversationId = 'conversation-456',
+    ) {
+        $this->agent = new FakeAgent;
+    }
+
+    public function response(): FakeResponseWithoutType
+    {
+        return new FakeResponseWithoutType(
+            output: 'The candidate is a strong fit.',
+            usage: new FakeUsage(promptTokens: 17, completionTokens: 8),
+        );
+    }
+}
+
 final class FakeTool
 {
     public function __construct(
@@ -97,5 +125,13 @@ final class FakeToolInvokedEvent
         public string $invocationId = 'invocation-123',
         public string $toolInvocationId = 'tool-call-789',
         public array $result = ['name' => 'Ada Lovelace'],
+    ) {}
+}
+
+final class FakeNestedToolOutput
+{
+    public function __construct(
+        public string $name,
+        public object $nested,
     ) {}
 }
