@@ -1,8 +1,8 @@
 # Laravel AI Observability
 
-OpenInference observability for the Laravel AI SDK.
+OpenInference traces for the Laravel AI SDK.
 
-This package listens to `laravel/ai` events, maps agent and model activity into OpenInference-style traces and spans, and exports them to local logs, an OTLP collector, supported observability tools, or your database.
+This package listens to `laravel/ai` events and exports agent runs, model calls, tool calls, inputs, outputs, usage, and errors to logs, OTLP receivers, or a local database.
 
 ## Requirements
 
@@ -16,58 +16,42 @@ This package listens to `laravel/ai` events, maps agent and model activity into 
 composer require tracefast/laravel-ai-observability
 ```
 
-Publish the configuration file:
+That is enough to start capturing traces. Observability is enabled by default and writes to your Laravel log.
+
+Publish the config only when you want to customize exporters:
 
 ```bash
 php artisan vendor:publish --tag=ai-observability-config
 ```
 
-## Configuration
+## Quick Start
 
-Enable tracing and choose an exporter in your `.env` file:
-
-```env
-AI_OBSERVABILITY_ENABLED=true
-AI_OBSERVABILITY_EXPORTER=stack
-AI_OBSERVABILITY_EXPORT_MODE=defer
-AI_OBSERVABILITY_EXPORT_TIMEOUT=2.0
-```
-
-The default exporter is `stack`, and the default stack sends traces to the `log` exporter. `AI_OBSERVABILITY_EXPORT_MODE` accepts `defer` or `sync`; the default `defer` mode uses Laravel deferred functions so export work runs after the response when Laravel can defer it.
-
-## Content Capture Warning
-
-V1 captures full LLM input and output by default. Captured content may include prompts, system messages, tool arguments, tool results, uploaded content, PII, secrets, and sensitive business data.
-
-Make the default explicit when you want full capture:
+The default exporter is `log`:
 
 ```env
-AI_OBSERVABILITY_CAPTURE_CONTENT=full
+# Optional. This is the default.
+AI_OBSERVABILITY_EXPORTER=log
 ```
 
-Disable content capture when needed:
-
-```env
-AI_OBSERVABILITY_CAPTURE_CONTENT=off
-```
+V1 captures full LLM input and output by default.
 
 ## Exporters
 
-Set `AI_OBSERVABILITY_EXPORTER` to one of the configured exporters in `config/ai-observability.php`.
-
-### Log
+Set `AI_OBSERVABILITY_EXPORTER` to one exporter name:
 
 ```env
-AI_OBSERVABILITY_ENABLED=true
-AI_OBSERVABILITY_EXPORTER=log
-AI_OBSERVABILITY_LOG_CHANNEL=stack
-AI_OBSERVABILITY_LOG_LEVEL=debug
+AI_OBSERVABILITY_EXPORTER=phoenix
+```
+
+Or send traces to multiple receivers:
+
+```env
+AI_OBSERVABILITY_EXPORTER=phoenix,langfuse
 ```
 
 ### Phoenix
 
 ```env
-AI_OBSERVABILITY_ENABLED=true
 AI_OBSERVABILITY_EXPORTER=phoenix
 PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
 ```
@@ -75,46 +59,63 @@ PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces
 ### Langfuse
 
 ```env
-AI_OBSERVABILITY_ENABLED=true
 AI_OBSERVABILITY_EXPORTER=langfuse
 LANGFUSE_OTEL_ENDPOINT=https://cloud.langfuse.com/api/public/otel/v1/traces
 LANGFUSE_OTEL_AUTHORIZATION="Basic <base64-public-key-colon-secret-key>"
-LANGFUSE_INGESTION_VERSION=4
 ```
 
 ### Braintrust
 
 ```env
-AI_OBSERVABILITY_ENABLED=true
 AI_OBSERVABILITY_EXPORTER=braintrust
-BRAINTRUST_OTEL_ENDPOINT=https://api.braintrust.dev/otel/v1/traces
 BRAINTRUST_API_KEY=<braintrust-api-key>
-BRAINTRUST_PARENT=<project-or-parent-resource>
+BRAINTRUST_PARENT=project_name:nexxa
 ```
 
-### Stack
+The Braintrust endpoint defaults to `https://api.braintrust.dev/otel/v1/traces`.
 
-The `stack` exporter fans out to multiple configured exporters:
-
-```php
-'default' => env('AI_OBSERVABILITY_EXPORTER', 'stack'),
-
-'exporters' => [
-    'stack' => [
-        'driver' => 'stack',
-        'channels' => ['log', 'phoenix'],
-    ],
-],
-```
+### Log
 
 ```env
-AI_OBSERVABILITY_ENABLED=true
-AI_OBSERVABILITY_EXPORTER=stack
+AI_OBSERVABILITY_EXPORTER=log
 ```
 
-### Database
+Advanced log options:
 
-Publish the migrations, run them, and use the `database` exporter:
+```env
+AI_OBSERVABILITY_LOG_CHANNEL=stack
+AI_OBSERVABILITY_LOG_LEVEL=debug
+```
+
+## Content Capture
+
+By default, this package captures full input and output. That may include prompts, system messages, tool arguments, tool results, uploaded content, PII, secrets, and sensitive business data.
+
+Disable content capture when needed:
+
+```env
+AI_OBSERVABILITY_CAPTURE_CONTENT=off
+```
+
+## Conversation Correlation
+
+Use `AiObservability::withSession()` when your app has its own conversation id:
+
+```php
+use Tracefast\LaravelAiObservability\Facades\AiObservability;
+
+$response = AiObservability::withSession(
+    sessionId: $conversation->uuid,
+    callback: fn () => $agent->prompt($message),
+    userId: $user->id,
+);
+```
+
+Each turn remains its own trace, and every turn carries the same `session.id`.
+
+## Database Exporter
+
+The database exporter is opt-in.
 
 ```bash
 php artisan vendor:publish --tag=ai-observability-migrations
@@ -122,24 +123,32 @@ php artisan migrate
 ```
 
 ```env
-AI_OBSERVABILITY_ENABLED=true
 AI_OBSERVABILITY_EXPORTER=database
+```
+
+Use a specific connection when needed:
+
+```env
 AI_OBSERVABILITY_DB_CONNECTION=mysql
 ```
 
-Leave `AI_OBSERVABILITY_DB_CONNECTION` empty to use Laravel's default database connection.
+The migration creates `ai_observability_traces` and `ai_observability_spans`.
 
-The database exporter stores traces and spans only. The published migration creates `ai_observability_traces` and `ai_observability_spans`.
+## Advanced Options
+
+```env
+AI_OBSERVABILITY_ENABLED=true
+AI_OBSERVABILITY_EXPORT_MODE=defer
+AI_OBSERVABILITY_EXPORT_TIMEOUT=2.0
+```
+
+`AI_OBSERVABILITY_EXPORT_MODE` accepts `defer` or `sync`. The default is `defer`, which exports after the response when Laravel can defer work.
 
 ## Custom Exporters
 
 Custom exporters implement `Tracefast\LaravelAiObservability\Contracts\Exporter`:
 
 ```php
-<?php
-
-namespace App\Observability;
-
 use Tracefast\LaravelAiObservability\Contracts\Exporter;
 use Tracefast\LaravelAiObservability\Data\Trace;
 
@@ -152,13 +161,9 @@ final class WebhookExporter implements Exporter
 }
 ```
 
-Register a custom driver from a service provider:
+Register the driver from a service provider:
 
 ```php
-<?php
-
-namespace App\Providers;
-
 use App\Observability\WebhookExporter;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
@@ -177,7 +182,7 @@ final class AppServiceProvider extends ServiceProvider
 }
 ```
 
-Then add the exporter to `config/ai-observability.php`:
+Then configure it:
 
 ```php
 'exporters' => [
