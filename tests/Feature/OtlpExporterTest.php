@@ -188,6 +188,65 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
     });
 });
 
+it('duplicates standard session attributes into braintrust metadata for the braintrust preset', function (): void {
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::response([], 200),
+    ]);
+
+    $trace = new Trace(
+        traceId: '0123456789abcdef0123456789abcdef',
+        name: 'chat request',
+        startedAt: '2026-01-01T00:00:00.123456Z',
+    );
+
+    $trace->addSpan((new Span(
+        traceId: '0123456789abcdef0123456789abcdef',
+        spanId: '0123456789abcdef',
+        parentSpanId: null,
+        name: 'llm completion',
+        kind: SpanKind::Llm,
+        status: SpanStatus::Ok,
+        startedAt: '2026-01-01T00:00:00.123456Z',
+        attributes: [
+            'session.id' => 'candidate-coach-123',
+            'user.id' => '42',
+            'tracefast.ai.conversation_id' => 'candidate-coach-123',
+        ],
+    ))->finish(
+        endedAt: '2026-01-01T00:00:01.654321Z',
+        status: SpanStatus::Ok,
+    ));
+
+    (new OtlpExporter([
+        'preset' => 'braintrust',
+        'endpoint' => 'https://example.test/otel/v1/traces',
+    ]))->export($trace);
+
+    Http::assertSent(function ($request): bool {
+        $attributes = $request->data()['resourceSpans'][0]['scopeSpans'][0]['spans'][0]['attributes'];
+
+        expect($attributes)
+            ->toContain([
+                'key' => 'session.id',
+                'value' => ['stringValue' => 'candidate-coach-123'],
+            ])
+            ->toContain([
+                'key' => 'braintrust.metadata.session_id',
+                'value' => ['stringValue' => 'candidate-coach-123'],
+            ])
+            ->toContain([
+                'key' => 'braintrust.metadata.user_id',
+                'value' => ['stringValue' => '42'],
+            ])
+            ->toContain([
+                'key' => 'braintrust.metadata.conversation_id',
+                'value' => ['stringValue' => 'candidate-coach-123'],
+            ]);
+
+        return true;
+    });
+});
+
 it('reports non successful otlp http responses without throwing into application code', function (): void {
     Exceptions::fake();
 
