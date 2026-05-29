@@ -33,6 +33,43 @@ it('trims comma separated exporter names', function (): void {
     expect(app(ExporterManager::class)->exporter(' null , log '))->toBeInstanceOf(StackExporter::class);
 });
 
+it('exports comma separated exporters to each resolved exporter', function (): void {
+    config()->set('ai-observability.exporters.first', ['driver' => 'capturing']);
+    config()->set('ai-observability.exporters.second', ['driver' => 'capturing']);
+
+    $exports = [];
+
+    app(AiObservability::class)->extend(
+        'capturing',
+        function (Application $app, array $config, string $name) use (&$exports): Exporter {
+            expect($app)->toBe(app())
+                ->and($config)->toBe(['driver' => 'capturing']);
+
+            return new class($exports, $name) implements Exporter
+            {
+                /**
+                 * @param  list<string>  $exports
+                 */
+                public function __construct(
+                    private array &$exports,
+                    private readonly string $name,
+                ) {}
+
+                public function export(Trace $trace): void
+                {
+                    $this->exports[] = $this->name;
+                }
+            };
+        },
+    );
+
+    app(ExporterManager::class)
+        ->exporter('first,second')
+        ->export(new Trace('trace-id', 'test trace'));
+
+    expect($exports)->toBe(['first', 'second']);
+});
+
 it('resolves database exporters', function (): void {
     expect(app(ExporterManager::class)->exporter('database'))->toBeInstanceOf(DatabaseExporter::class);
 });
