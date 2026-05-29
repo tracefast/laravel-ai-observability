@@ -43,7 +43,7 @@ final class LaravelAiEventMapper
         return [
             'invocation_id' => $invocationId,
             'name' => $this->name($event, $agent, 'agent'),
-            'input' => $this->content($prompt) ?? $this->value($event, ['input']),
+            'input' => $this->promptInput($prompt, $this->value($event, ['input'])),
             'attributes' => Arr::withoutNulls([
                 'openinference.span.kind' => 'agent',
                 'tracefast.ai.invocation_id' => $invocationId,
@@ -74,7 +74,7 @@ final class LaravelAiEventMapper
                     ?? $this->value($response, ['invocationId', 'invocation_id'])
                     ?? $this->value($prompt, ['invocationId', 'invocation_id'])
             ),
-            'output' => $this->content($response) ?? $this->value($event, ['output']),
+            'output' => $this->responseOutput($response, $this->value($event, ['output'])),
             'attributes' => Arr::withoutNulls([
                 'llm.provider' => $this->providerName(
                     $this->value($event, ['provider'])
@@ -112,7 +112,7 @@ final class LaravelAiEventMapper
             'invocation_id' => $this->stringValue($this->value($event, ['invocationId', 'invocation_id'])),
             'tool_invocation_id' => $toolInvocationId,
             'name' => $name,
-            'input' => $this->serializable($this->value($event, ['arguments', 'args', 'input'])),
+            'input' => $this->captured($this->value($event, ['arguments', 'args', 'input'])),
             'attributes' => Arr::withoutNulls([
                 'openinference.span.kind' => 'tool',
                 'tool.name' => $name,
@@ -129,7 +129,7 @@ final class LaravelAiEventMapper
         return [
             'invocation_id' => $this->stringValue($this->value($event, ['invocationId', 'invocation_id'])),
             'tool_invocation_id' => $this->stringValue($this->value($event, ['toolInvocationId', 'tool_invocation_id', 'toolCallId', 'tool_call_id'])),
-            'output' => $this->serializable($this->value($event, ['result', 'output'])),
+            'output' => $this->captured($this->value($event, ['result', 'output'])),
         ];
     }
 
@@ -187,6 +187,61 @@ final class LaravelAiEventMapper
         }
 
         return $fallback === 'agent' ? class_basename($event) : $fallback;
+    }
+
+    private function promptInput(mixed $prompt, mixed $fallback): mixed
+    {
+        if (! $this->capturesContent()) {
+            return null;
+        }
+
+        $value = $this->value($prompt, ['input', 'prompt', 'text', 'content', 'message']);
+        $messages = $this->value($prompt, ['messages']);
+
+        if ($messages !== null) {
+            return Arr::withoutNulls([
+                'value' => $this->serializable($value),
+                'messages' => $this->serializable($messages),
+            ]);
+        }
+
+        return $this->content($prompt) ?? $this->serializable($fallback);
+    }
+
+    private function responseOutput(mixed $response, mixed $fallback): mixed
+    {
+        if (! $this->capturesContent()) {
+            return null;
+        }
+
+        $toolCalls = $this->value($response, ['toolCalls', 'tool_calls']);
+        $toolResults = $this->value($response, ['toolResults', 'tool_results']);
+        $steps = $this->value($response, ['steps']);
+
+        if ($toolCalls !== null || $toolResults !== null || $steps !== null) {
+            return [
+                'value' => $this->serializable($this->value($response, ['output', 'text', 'content', 'message', 'result']) ?? $fallback),
+                'tool_calls' => $this->serializable($toolCalls ?? []),
+                'tool_results' => $this->serializable($toolResults ?? []),
+                'steps' => $this->serializable($steps ?? []),
+            ];
+        }
+
+        return $this->content($response) ?? $this->serializable($fallback);
+    }
+
+    private function captured(mixed $value): mixed
+    {
+        if (! $this->capturesContent()) {
+            return null;
+        }
+
+        return $this->serializable($value);
+    }
+
+    private function capturesContent(): bool
+    {
+        return config('ai-observability.capture.content', 'full') !== 'off';
     }
 
     private function content(mixed $target): mixed
