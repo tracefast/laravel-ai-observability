@@ -9,6 +9,8 @@ OpenInference traces for the Laravel AI SDK.
 
 This package listens to `laravel/ai` events and exports agent runs, model calls, tool calls, inputs, outputs, usage, and errors to logs, OTLP receivers, or a local database.
 
+It is designed to be safe to install early in a project: the default setup writes structured traces to your existing Laravel log, avoids network calls, and runs export work through Laravel's deferred callback lifecycle where available. When you are ready for a collector, switch the exporter to Phoenix, Langfuse, Braintrust, generic OTLP, database storage, or your own driver.
+
 ## Requirements
 
 - PHP 8.4+
@@ -39,6 +41,8 @@ AI_OBSERVABILITY_EXPORTER=log
 ```
 
 V1 captures full LLM input and output by default.
+
+For remote collectors in production, keep the default `defer` export mode or move exports to `queue` or `background` so trace delivery does not sit directly in the request path.
 
 ## Exporters
 
