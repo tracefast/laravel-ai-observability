@@ -1,5 +1,10 @@
 # Laravel AI Observability
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/tracefast/laravel-ai-observability.svg?style=flat-square)](https://packagist.org/packages/tracefast/laravel-ai-observability)
+[![Total Downloads](https://img.shields.io/packagist/dt/tracefast/laravel-ai-observability.svg?style=flat-square)](https://packagist.org/packages/tracefast/laravel-ai-observability)
+[![PHP Version](https://img.shields.io/packagist/php-v/tracefast/laravel-ai-observability.svg?style=flat-square)](https://packagist.org/packages/tracefast/laravel-ai-observability)
+[![License](https://img.shields.io/packagist/l/tracefast/laravel-ai-observability.svg?style=flat-square)](LICENSE.md)
+
 OpenInference traces for the Laravel AI SDK.
 
 This package listens to `laravel/ai` events and exports agent runs, model calls, tool calls, inputs, outputs, usage, and errors to logs, OTLP receivers, or a local database.
