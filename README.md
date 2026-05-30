@@ -144,10 +144,53 @@ The migration creates `ai_observability_traces` and `ai_observability_spans`.
 ```env
 AI_OBSERVABILITY_ENABLED=true
 AI_OBSERVABILITY_EXPORT_MODE=defer
+AI_OBSERVABILITY_SAMPLE_RATE=1.0
 AI_OBSERVABILITY_EXPORT_TIMEOUT=2.0
+AI_OBSERVABILITY_EXPORT_CONNECT_TIMEOUT=0.5
+AI_OBSERVABILITY_MAX_PAYLOAD_BYTES=1048576
 ```
 
-`AI_OBSERVABILITY_EXPORT_MODE` accepts `defer` or `sync`. The default is `defer`, which exports after the response when Laravel can defer work.
+`AI_OBSERVABILITY_EXPORT_MODE` accepts `defer`, `sync`, `queue`, or `background`. The default is `defer`, which exports after the response when Laravel can defer work. Deferred exports also run at Laravel command and queue job boundaries through Laravel's deferred callback lifecycle.
+
+Use `queue` when you want exports handled by a normal queue worker:
+
+```env
+AI_OBSERVABILITY_EXPORT_MODE=queue
+AI_OBSERVABILITY_EXPORT_CONNECTION=redis
+AI_OBSERVABILITY_EXPORT_QUEUE=observability
+```
+
+Use `background` when your Laravel app has a `background` queue connection and you want to release the current PHP worker quickly:
+
+```env
+AI_OBSERVABILITY_EXPORT_MODE=background
+```
+
+### Production Transport Hardening
+
+```env
+AI_OBSERVABILITY_EXPORT_TIMEOUT=2.0
+AI_OBSERVABILITY_EXPORT_CONNECT_TIMEOUT=0.5
+AI_OBSERVABILITY_MAX_PAYLOAD_BYTES=1048576
+AI_OBSERVABILITY_EXPORT_RETRY_ATTEMPTS=1
+AI_OBSERVABILITY_EXPORT_RETRY_DELAY_MS=100
+AI_OBSERVABILITY_OTLP_COMPRESSION=gzip
+AI_OBSERVABILITY_CIRCUIT_BREAKER=true
+AI_OBSERVABILITY_CIRCUIT_BREAKER_FAILURE_THRESHOLD=3
+AI_OBSERVABILITY_CIRCUIT_BREAKER_OPEN_SECONDS=30
+```
+
+Payloads over `AI_OBSERVABILITY_MAX_PAYLOAD_BYTES` are dropped and reported locally instead of being sent. OTLP retries are bounded and only intended for transient collector failures such as network errors, `408`, `425`, `429`, and `5xx` responses. The circuit breaker skips sends for a short window after repeated failures so a dead collector does not keep taxing request workers.
+
+### Generic OTLP
+
+```env
+AI_OBSERVABILITY_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://collector.example.com/v1/traces
+OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Bearer <token>"
+```
+
+OTLP payloads include OpenInference and versioned Tracefast metadata such as `openinference.schema.version`, `tracefast.ai.sdk.version`, `tracefast.ai.package.version`, and `gen_ai.*` attributes where the Laravel AI SDK exposes the source data.
 
 ## Custom Exporters
 

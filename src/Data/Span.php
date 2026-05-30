@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tracefast\LaravelAiObservability\Data;
 
 use Tracefast\LaravelAiObservability\Support\Clock;
+use Tracefast\LaravelAiObservability\Support\PackageInfo;
 
 final class Span
 {
@@ -34,6 +35,28 @@ final class Span
     public function spanId(): string
     {
         return $this->spanId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public static function fromArray(array $payload): self
+    {
+        return new self(
+            traceId: (string) ($payload['trace_id'] ?? ''),
+            spanId: (string) ($payload['span_id'] ?? ''),
+            parentSpanId: isset($payload['parent_span_id']) ? (string) $payload['parent_span_id'] : null,
+            name: (string) ($payload['name'] ?? 'span'),
+            kind: SpanKind::tryFrom((string) ($payload['kind'] ?? '')) ?? SpanKind::Chain,
+            status: SpanStatus::tryFrom((string) ($payload['status'] ?? '')) ?? SpanStatus::Unset,
+            startedAt: (string) ($payload['started_at'] ?? ''),
+            endedAt: isset($payload['ended_at']) ? (string) $payload['ended_at'] : null,
+            attributes: is_array($payload['attributes'] ?? null) ? $payload['attributes'] : [],
+            input: $payload['input'] ?? null,
+            output: $payload['output'] ?? null,
+            errorType: isset($payload['error_type']) ? (string) $payload['error_type'] : null,
+            errorMessage: isset($payload['error_message']) ? (string) $payload['error_message'] : null,
+        );
     }
 
     /**
@@ -76,9 +99,14 @@ final class Span
             'started_at' => $this->startedAt,
             'ended_at' => $this->endedAt,
             'duration_ms' => Clock::durationMs($this->startedAt, $this->endedAt),
-            'attributes' => array_merge($this->attributes, [
+            'attributes' => array_merge([
                 'openinference.span.kind' => $this->kind->value,
-            ]),
+                'openinference.schema.version' => PackageInfo::OpenInferenceSchemaVersion,
+                'tracefast.ai.package.name' => PackageInfo::Name,
+                'tracefast.ai.package.version' => PackageInfo::packageVersion(),
+                'tracefast.ai.sdk.name' => PackageInfo::LaravelAiName,
+                'tracefast.ai.sdk.version' => PackageInfo::laravelAiVersion(),
+            ], $this->attributes),
             'input' => $this->input,
             'output' => $this->output,
             'error_type' => $this->errorType,

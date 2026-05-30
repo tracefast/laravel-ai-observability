@@ -1,0 +1,134 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "Laravel"
+            }
+          },
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "tracefast.laravel-ai-observability"
+            }
+          },
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "php"
+            }
+          },
+          {
+            "key": "telemetry.sdk.version",
+            "value": {
+              "stringValue": "dev-main"
+            }
+          },
+          {
+            "key": "openinference.schema.version",
+            "value": {
+              "stringValue": "1.0.0"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "tracefast.laravel-ai-observability"
+          },
+          "spans": [
+            {
+              "traceId": "0123456789abcdef0123456789abcdef",
+              "spanId": "0123456789abcdef",
+              "parentSpanId": "fedcba9876543210",
+              "name": "llm completion",
+              "attributes": [
+                {
+                  "key": "openinference.span.kind",
+                  "value": {
+                    "stringValue": "llm"
+                  }
+                },
+                {
+                  "key": "openinference.schema.version",
+                  "value": {
+                    "stringValue": "1.0.0"
+                  }
+                },
+                {
+                  "key": "tracefast.ai.package.name",
+                  "value": {
+                    "stringValue": "tracefast/laravel-ai-observability"
+                  }
+                },
+                {
+                  "key": "tracefast.ai.package.version",
+                  "value": {
+                    "stringValue": "dev-main"
+                  }
+                },
+                {
+                  "key": "tracefast.ai.sdk.name",
+                  "value": {
+                    "stringValue": "laravel/ai"
+                  }
+                },
+                {
+                  "key": "tracefast.ai.sdk.version",
+                  "value": {
+                    "stringValue": "v0.7.2"
+                  }
+                },
+                {
+                  "key": "llm.model_name",
+                  "value": {
+                    "stringValue": "gpt-4.1"
+                  }
+                },
+                {
+                  "key": "session.id",
+                  "value": {
+                    "stringValue": "candidate-coach-123"
+                  }
+                },
+                {
+                  "key": "user.id",
+                  "value": {
+                    "stringValue": "42"
+                  }
+                },
+                {
+                  "key": "tracefast.ai.conversation_id",
+                  "value": {
+                    "stringValue": "candidate-coach-123"
+                  }
+                },
+                {
+                  "key": "input.value",
+                  "value": {
+                    "stringValue": "{\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}"
+                  }
+                },
+                {
+                  "key": "output.value",
+                  "value": {
+                    "stringValue": "{\"content\":\"Hi there\"}"
+                  }
+                }
+              ],
+              "startTimeUnixNano": "1767225600123456000",
+              "endTimeUnixNano": "1767225601654321000",
+              "status": {
+                "code": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

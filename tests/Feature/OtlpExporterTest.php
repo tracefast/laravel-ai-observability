@@ -9,6 +9,7 @@ use Tracefast\LaravelAiObservability\Data\Span;
 use Tracefast\LaravelAiObservability\Data\SpanKind;
 use Tracefast\LaravelAiObservability\Data\SpanStatus;
 use Tracefast\LaravelAiObservability\Data\Trace;
+use Tracefast\LaravelAiObservability\Exceptions\PayloadTooLargeException;
 use Tracefast\LaravelAiObservability\Exporters\OtlpEndpoint;
 use Tracefast\LaravelAiObservability\Exporters\OtlpExporter;
 
@@ -164,6 +165,14 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
         expect($request->url())->toBe('https://example.test/otel/v1/traces')
             ->and($request->hasHeader('Content-Type', 'application/json'))->toBeTrue()
             ->and($request->hasHeader('Authorization', 'Bearer token'))->toBeTrue()
+            ->and($payload['resourceSpans'][0]['resource']['attributes'])->toContain([
+                'key' => 'telemetry.sdk.name',
+                'value' => ['stringValue' => 'tracefast.laravel-ai-observability'],
+            ])
+            ->and($payload['resourceSpans'][0]['resource']['attributes'])->toContain([
+                'key' => 'openinference.schema.version',
+                'value' => ['stringValue' => '1.0.0'],
+            ])
             ->and($payload)->toHaveKey('resourceSpans.0.scopeSpans.0.spans.0')
             ->and($span)->toMatchArray([
                 'traceId' => '0123456789abcdef0123456789abcdef',
@@ -189,6 +198,14 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
             ->and($span['attributes'])->toContain([
                 'key' => 'tracefast.ai.conversation_id',
                 'value' => ['stringValue' => 'candidate-coach-123'],
+            ])
+            ->and($span['attributes'])->toContain([
+                'key' => 'tracefast.ai.sdk.name',
+                'value' => ['stringValue' => 'laravel/ai'],
+            ])
+            ->and($span['attributes'])->toContain([
+                'key' => 'tracefast.ai.sdk.version',
+                'value' => ['stringValue' => 'v0.7.2'],
             ])
             ->and($span['attributes'])->toContain([
                 'key' => 'input.value',
@@ -259,4 +276,97 @@ it('reports exporter failures without throwing into application code', function 
     ]))->export(otlpTrace());
 
     expect(true)->toBeTrue();
+});
+
+it('drops payloads that exceed the configured byte limit', function (): void {
+    Exceptions::fake();
+    Http::fake();
+
+    (new OtlpExporter([
+        'endpoint' => 'https://example.test/otel',
+        'max_payload_bytes' => 10,
+    ]))->export(otlpTrace());
+
+    Http::assertNothingSent();
+    Exceptions::assertReported(PayloadTooLargeException::class);
+});
+
+it('gzip compresses otlp json payloads when enabled', function (): void {
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::response([], 200),
+    ]);
+
+    (new OtlpExporter([
+        'endpoint' => 'https://example.test/otel',
+        'compression' => 'gzip',
+    ]))->export(otlpTrace());
+
+    Http::assertSent(function ($request): bool {
+        expect($request->hasHeader('Content-Encoding', 'gzip'))->toBeTrue()
+            ->and(json_decode(gzdecode($request->body()), true))->toHaveKey('resourceSpans.0.scopeSpans.0.spans.0');
+
+        return true;
+    });
+});
+
+it('retries transient otlp failures with a bounded retry count', function (): void {
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::sequence()
+            ->push([], 500)
+            ->push([], 200),
+    ]);
+
+    (new OtlpExporter([
+        'endpoint' => 'https://example.test/otel',
+        'retry_attempts' => 1,
+        'retry_delay_ms' => 0,
+    ]))->export(otlpTrace());
+
+    Http::assertSentCount(2);
+});
+
+it('opens a circuit breaker after repeated otlp failures', function (): void {
+    Exceptions::fake();
+
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::response([], 500),
+    ]);
+
+    $exporter = new OtlpExporter([
+        'endpoint' => 'https://example.test/otel',
+        'retry_attempts' => 0,
+        'circuit_breaker' => [
+            'enabled' => true,
+            'failure_threshold' => 1,
+            'open_seconds' => 60,
+        ],
+    ]);
+
+    $exporter->export(otlpTrace());
+    $exporter->export(otlpTrace());
+
+    Http::assertSentCount(1);
+    Exceptions::assertReported(RequestException::class);
+});
+
+it('matches the golden openinference otlp payload fixture', function (): void {
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::response([], 200),
+    ]);
+
+    (new OtlpExporter([
+        'endpoint' => 'https://example.test/otel',
+    ]))->export(otlpTrace());
+
+    Http::assertSent(function ($request): bool {
+        $fixture = json_decode(
+            file_get_contents(__DIR__.'/../Fixtures/otlp-openinference-golden.json'),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+
+        expect($request->data())->toMatchArray($fixture);
+
+        return true;
+    });
 });

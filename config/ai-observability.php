@@ -11,7 +11,20 @@ return [
 
     'export' => [
         'mode' => env('AI_OBSERVABILITY_EXPORT_MODE', 'defer'),
+        'connection' => env('AI_OBSERVABILITY_EXPORT_CONNECTION'),
+        'queue' => env('AI_OBSERVABILITY_EXPORT_QUEUE'),
+        'sample_rate' => (float) env('AI_OBSERVABILITY_SAMPLE_RATE', 1.0),
         'timeout' => (float) env('AI_OBSERVABILITY_EXPORT_TIMEOUT', 2.0),
+        'connect_timeout' => (float) env('AI_OBSERVABILITY_EXPORT_CONNECT_TIMEOUT', 0.5),
+        'max_payload_bytes' => (int) env('AI_OBSERVABILITY_MAX_PAYLOAD_BYTES', 1048576),
+        'retry_attempts' => (int) env('AI_OBSERVABILITY_EXPORT_RETRY_ATTEMPTS', 1),
+        'retry_delay_ms' => (int) env('AI_OBSERVABILITY_EXPORT_RETRY_DELAY_MS', 100),
+        'compression' => env('AI_OBSERVABILITY_OTLP_COMPRESSION', 'none'),
+        'circuit_breaker' => [
+            'enabled' => (bool) env('AI_OBSERVABILITY_CIRCUIT_BREAKER', false),
+            'failure_threshold' => (int) env('AI_OBSERVABILITY_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 3),
+            'open_seconds' => (int) env('AI_OBSERVABILITY_CIRCUIT_BREAKER_OPEN_SECONDS', 30),
+        ],
     ],
 
     'exporters' => [
@@ -24,6 +37,12 @@ return [
             'driver' => 'log',
             'channel' => env('AI_OBSERVABILITY_LOG_CHANNEL'),
             'level' => env('AI_OBSERVABILITY_LOG_LEVEL', 'debug'),
+        ],
+
+        'otlp' => [
+            'driver' => 'otlp',
+            'endpoint' => env('AI_OBSERVABILITY_OTLP_ENDPOINT'),
+            'headers' => [],
         ],
 
         'phoenix' => [

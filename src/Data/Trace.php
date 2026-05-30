@@ -39,6 +39,28 @@ final class Trace
     }
 
     /**
+     * @param  array<string, mixed>  $payload
+     */
+    public static function fromArray(array $payload): self
+    {
+        $trace = new self(
+            traceId: (string) ($payload['trace_id'] ?? ''),
+            name: (string) ($payload['name'] ?? 'trace'),
+            startedAt: (string) ($payload['started_at'] ?? ''),
+            status: SpanStatus::tryFrom((string) ($payload['status'] ?? '')) ?? SpanStatus::Unset,
+            endedAt: isset($payload['ended_at']) ? (string) $payload['ended_at'] : null,
+        );
+
+        foreach (($payload['spans'] ?? []) as $span) {
+            if (is_array($span)) {
+                $trace->addSpan(Span::fromArray($span));
+            }
+        }
+
+        return $trace;
+    }
+
+    /**
      * @return list<Span>
      */
     public function spans(): array
