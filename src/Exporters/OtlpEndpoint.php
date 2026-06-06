@@ -73,6 +73,7 @@ final class OtlpEndpoint
         return array_merge(
             self::environmentHeaders('OTEL_EXPORTER_OTLP_HEADERS'),
             self::environmentHeaders('OTEL_EXPORTER_OTLP_TRACES_HEADERS'),
+            self::configuredHeaders($config['header_string'] ?? []),
             self::configuredHeaders($config['headers'] ?? []),
         );
     }
@@ -88,6 +89,14 @@ final class OtlpEndpoint
             return [];
         }
 
+        return self::headerString($value);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function headerString(string $value): array
+    {
         $headers = [];
 
         foreach (explode(',', $value) as $part) {
@@ -111,6 +120,10 @@ final class OtlpEndpoint
      */
     private static function configuredHeaders(mixed $headers): array
     {
+        if (is_string($headers)) {
+            return self::headerString($headers);
+        }
+
         if (! is_array($headers)) {
             return [];
         }

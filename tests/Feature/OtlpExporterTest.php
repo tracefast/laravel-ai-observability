@@ -127,6 +127,35 @@ it('merges environment and configured headers while filtering empty values', fun
     });
 });
 
+it('parses configured otlp header strings for cached laravel config', function (): void {
+    withOtlpEnvironment([], function (): void {
+        $endpoint = OtlpEndpoint::fromConfig([
+            'header_string' => 'x-tracefast-api-key=secret%3Dvalue,Authorization=Bearer%20cached,x-empty=',
+        ]);
+
+        expect($endpoint->headers)->toBe([
+            'x-tracefast-api-key' => 'secret=value',
+            'Authorization' => 'Bearer cached',
+        ]);
+    });
+});
+
+it('merges configured header strings with tracefast api key config', function (): void {
+    withOtlpEnvironment([], function (): void {
+        $endpoint = OtlpEndpoint::fromConfig([
+            'header_string' => 'Authorization=Bearer%20cached',
+            'headers' => [
+                'x-tracefast-api-key' => 'tracefast-key',
+            ],
+        ]);
+
+        expect($endpoint->headers)->toBe([
+            'Authorization' => 'Bearer cached',
+            'x-tracefast-api-key' => 'tracefast-key',
+        ]);
+    });
+});
+
 it('url decodes environment header names and values', function (): void {
     withOtlpEnvironment([
         'OTEL_EXPORTER_OTLP_HEADERS' => 'Authorization=Bearer%20env,x-api%2Dkey=secret%3Dvalue',
@@ -142,6 +171,23 @@ it('url decodes environment header names and values', function (): void {
             'x-api-key' => 'secret=value',
             'x-config' => 'literal%20value',
         ]);
+    });
+});
+
+it('sends configured otlp header strings', function (): void {
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::response([], 200),
+    ]);
+
+    (new OtlpExporter([
+        'endpoint' => 'https://example.test/otel/v1/traces',
+        'header_string' => 'x-tracefast-api-key=tracefast-key',
+    ]))->export(otlpTrace());
+
+    Http::assertSent(function ($request): bool {
+        expect($request->hasHeader('x-tracefast-api-key', 'tracefast-key'))->toBeTrue();
+
+        return true;
     });
 });
 

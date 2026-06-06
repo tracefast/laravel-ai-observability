@@ -188,6 +188,24 @@ Payloads over `AI_OBSERVABILITY_MAX_PAYLOAD_BYTES` are dropped and reported loca
 
 ### Generic OTLP
 
+For Laravel apps that run `php artisan optimize` or otherwise cache config, prefer the package-specific variables so endpoint and headers are baked into Laravel's cached config:
+
+```env
+AI_OBSERVABILITY_EXPORTER=otlp
+AI_OBSERVABILITY_OTLP_ENDPOINT=https://collector.example.com/v1/traces
+AI_OBSERVABILITY_OTLP_HEADERS="Authorization=Bearer <token>"
+```
+
+When sending to Tracefast, you can set the project key directly:
+
+```env
+AI_OBSERVABILITY_EXPORTER=otlp
+AI_OBSERVABILITY_OTLP_ENDPOINT=https://collector.tracefast.dev/v1/traces
+TRACEFAST_API_KEY=<tracefast-project-api-key>
+```
+
+The package also honors standard OTEL variables when they are available as real process environment variables. As of v1.1.1, those variables are also bridged through Laravel config when they are present in `.env` during config caching:
+
 ```env
 AI_OBSERVABILITY_EXPORTER=otlp
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://collector.example.com/v1/traces
