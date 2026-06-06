@@ -61,6 +61,7 @@
         "openinference",
         "opentelemetry",
         "otlp",
+        "tracefast",
         "phoenix",
         "langfuse",
         "braintrust",

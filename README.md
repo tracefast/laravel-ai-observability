@@ -7,9 +7,9 @@
 
 OpenInference traces for the Laravel AI SDK.
 
-This package listens to `laravel/ai` events and exports agent runs, model calls, tool calls, inputs, outputs, usage, and errors to logs, OTLP receivers, or a local database.
+This package listens to `laravel/ai` events and exports agent runs, model calls, tool calls, inputs, outputs, usage, and errors to logs, TraceFast, OTLP receivers, or a local database.
 
-It is designed to be safe to install early in a project: the default setup writes structured traces to your existing Laravel log, avoids network calls, and runs export work through Laravel's deferred callback lifecycle where available. When you are ready for a collector, switch the exporter to Phoenix, Langfuse, Braintrust, generic OTLP, database storage, or your own driver.
+It is designed to be safe to install early in a project: the default setup writes structured traces to your existing Laravel log, avoids network calls, and runs export work through Laravel's deferred callback lifecycle where available. When you are ready for a collector, switch the exporter to TraceFast, Phoenix, Langfuse, Braintrust, generic OTLP, database storage, or your own driver.
 
 ## Requirements
 
@@ -55,7 +55,21 @@ AI_OBSERVABILITY_EXPORTER=phoenix
 Or send traces to multiple receivers:
 
 ```env
-AI_OBSERVABILITY_EXPORTER=phoenix,langfuse
+AI_OBSERVABILITY_EXPORTER=tracefast,braintrust
+```
+
+### TraceFast
+
+```env
+AI_OBSERVABILITY_EXPORTER=tracefast
+TRACEFAST_API_KEY=<tracefast-project-api-key>
+```
+
+The TraceFast endpoint defaults to `https://collector.tracefast.dev/v1/traces`.
+Override it only when TraceFast gives you a custom collector URL:
+
+```env
+TRACEFAST_OTEL_ENDPOINT=https://collector.tracefast.dev/v1/traces
 ```
 
 ### Phoenix
@@ -194,14 +208,6 @@ For Laravel apps that run `php artisan optimize` or otherwise cache config, pref
 AI_OBSERVABILITY_EXPORTER=otlp
 AI_OBSERVABILITY_OTLP_ENDPOINT=https://collector.example.com/v1/traces
 AI_OBSERVABILITY_OTLP_HEADERS="Authorization=Bearer <token>"
-```
-
-When sending to Tracefast, you can set the project key directly:
-
-```env
-AI_OBSERVABILITY_EXPORTER=otlp
-AI_OBSERVABILITY_OTLP_ENDPOINT=https://collector.tracefast.dev/v1/traces
-TRACEFAST_API_KEY=<tracefast-project-api-key>
 ```
 
 The package also honors standard OTEL variables when they are available as real process environment variables. As of v1.1.1, those variables are also bridged through Laravel config when they are present in `.env` during config caching:

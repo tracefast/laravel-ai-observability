@@ -93,6 +93,10 @@ it('resolves otlp exporters', function (): void {
     expect(app(ExporterManager::class)->exporter('otlp'))->toBeInstanceOf(OtlpExporter::class);
 });
 
+it('resolves tracefast exporters', function (): void {
+    expect(app(ExporterManager::class)->exporter('tracefast'))->toBeInstanceOf(OtlpExporter::class);
+});
+
 it('rejects direct stack cycles', function (): void {
     config()->set('ai-observability.exporters.stack.channels', ['stack']);
 

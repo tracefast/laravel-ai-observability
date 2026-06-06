@@ -45,13 +45,20 @@ return [
                 'AI_OBSERVABILITY_OTLP_ENDPOINT',
                 env('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', env('OTEL_EXPORTER_OTLP_ENDPOINT')),
             ),
-            'headers' => [
-                'x-tracefast-api-key' => env('TRACEFAST_API_KEY'),
-            ],
+            'headers' => [],
             'header_string' => env(
                 'AI_OBSERVABILITY_OTLP_HEADERS',
                 env('OTEL_EXPORTER_OTLP_TRACES_HEADERS', env('OTEL_EXPORTER_OTLP_HEADERS')),
             ),
+        ],
+
+        'tracefast' => [
+            'driver' => 'otlp',
+            'preset' => 'tracefast',
+            'endpoint' => env('TRACEFAST_OTEL_ENDPOINT', 'https://collector.tracefast.dev/v1/traces'),
+            'headers' => [
+                'x-tracefast-api-key' => env('TRACEFAST_API_KEY'),
+            ],
         ],
 
         'phoenix' => [

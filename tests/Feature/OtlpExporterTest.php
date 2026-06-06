@@ -10,6 +10,7 @@ use Tracefast\LaravelAiObservability\Data\SpanKind;
 use Tracefast\LaravelAiObservability\Data\SpanStatus;
 use Tracefast\LaravelAiObservability\Data\Trace;
 use Tracefast\LaravelAiObservability\Exceptions\PayloadTooLargeException;
+use Tracefast\LaravelAiObservability\Exporters\ExporterManager;
 use Tracefast\LaravelAiObservability\Exporters\OtlpEndpoint;
 use Tracefast\LaravelAiObservability\Exporters\OtlpExporter;
 
@@ -186,6 +187,30 @@ it('sends configured otlp header strings', function (): void {
 
     Http::assertSent(function ($request): bool {
         expect($request->hasHeader('x-tracefast-api-key', 'tracefast-key'))->toBeTrue();
+
+        return true;
+    });
+});
+
+it('sends tracefast exporter payloads to tracefast with the project api key', function (): void {
+    config()->set('ai-observability.exporters.tracefast', [
+        'driver' => 'otlp',
+        'preset' => 'tracefast',
+        'endpoint' => 'https://collector.tracefast.test/v1/traces',
+        'headers' => [
+            'x-tracefast-api-key' => 'tracefast-key',
+        ],
+    ]);
+
+    Http::fake([
+        'https://collector.tracefast.test/v1/traces' => Http::response([], 200),
+    ]);
+
+    app(ExporterManager::class)->exporter('tracefast')->export(otlpTrace());
+
+    Http::assertSent(function ($request): bool {
+        expect($request->url())->toBe('https://collector.tracefast.test/v1/traces')
+            ->and($request->hasHeader('x-tracefast-api-key', 'tracefast-key'))->toBeTrue();
 
         return true;
     });
