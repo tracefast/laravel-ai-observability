@@ -25,7 +25,13 @@ final class LaravelAiEventMapper
     ) {}
 
     /**
-     * @return array{invocation_id: ?string, name: string, input: mixed, attributes: array<string, mixed>}
+     * @return array{
+     *     invocation_id: ?string,
+     *     name: string,
+     *     input: mixed,
+     *     attributes: array<string, mixed>,
+     *     llm_span: array{name: string, input: mixed, attributes: array<string, mixed>}
+     * }
      */
     public function prompting(object $event): array
     {
@@ -48,28 +54,42 @@ final class LaravelAiEventMapper
         );
         $promptText = $this->promptText($prompt, $eventInput);
         $promptMessages = $this->promptJson($prompt, $agent, $eventInput);
+        $input = $this->promptInput($prompt, $eventInput);
 
         return [
             'invocation_id' => $invocationId,
             'name' => $this->name($event, $agent, 'agent'),
-            'input' => $this->promptInput($prompt, $eventInput),
+            'input' => $input,
             'attributes' => $this->attributes([
                 'openinference.span.kind' => 'agent',
                 'tracefast.ai.invocation_id' => $invocationId,
-                'llm.provider' => $provider,
-                'llm.model_name' => $model,
-                'gen_ai.operation.name' => $invocationId !== null ? 'chat' : null,
-                'gen_ai.system' => $provider,
-                'gen_ai.provider.name' => $provider,
-                'gen_ai.request.model' => $model,
-                'gen_ai.prompt' => $promptText,
-                'gen_ai.prompt_json' => $promptMessages,
             ]),
+            'llm_span' => [
+                'name' => $this->llmSpanName($model),
+                'input' => $input,
+                'attributes' => $this->attributes([
+                    'openinference.span.kind' => 'llm',
+                    'tracefast.ai.invocation_id' => $invocationId,
+                    'llm.provider' => $provider,
+                    'llm.model_name' => $model,
+                    'gen_ai.operation.name' => $invocationId !== null ? 'chat' : null,
+                    'gen_ai.system' => $provider,
+                    'gen_ai.provider.name' => $provider,
+                    'gen_ai.request.model' => $model,
+                    'gen_ai.prompt' => $promptText,
+                    'gen_ai.prompt_json' => $promptMessages,
+                ]),
+            ],
         ];
     }
 
     /**
-     * @return array{invocation_id: ?string, output: mixed, attributes: array<string, mixed>}
+     * @return array{
+     *     invocation_id: ?string,
+     *     output: mixed,
+     *     attributes: array<string, mixed>,
+     *     llm_span: array{output: mixed, attributes: array<string, mixed>}
+     * }
      */
     public function prompted(object $event): array
     {
@@ -96,6 +116,12 @@ final class LaravelAiEventMapper
         $completionTokens = $this->value($usage, ['completionTokens', 'completion_tokens', 'outputTokens', 'output_tokens']);
         $responseType = $this->stringValue($this->value($event, ['responseType', 'response_type', 'type']) ?? $this->value($response, ['responseType', 'response_type', 'type']))
             ?? (is_object($response) ? class_basename($response) : null);
+        $conversationId = $this->stringValue(
+            $this->value($event, ['conversationId', 'conversation_id'])
+                ?? $this->value($response, ['conversationId', 'conversation_id'])
+        );
+        $output = $this->responseOutput($response, $this->value($event, ['output']));
+        $completion = $this->responseText($response, $this->value($event, ['output']));
 
         return [
             'invocation_id' => $this->stringValue(
@@ -103,24 +129,29 @@ final class LaravelAiEventMapper
                     ?? $this->value($response, ['invocationId', 'invocation_id'])
                     ?? $this->value($prompt, ['invocationId', 'invocation_id'])
             ),
-            'output' => $this->responseOutput($response, $this->value($event, ['output'])),
+            'output' => $output,
             'attributes' => $this->attributes([
-                'llm.provider' => $provider,
-                'llm.model_name' => $model,
-                'llm.token_count.prompt' => $promptTokens,
-                'llm.token_count.completion' => $completionTokens,
-                'gen_ai.system' => $provider,
-                'gen_ai.provider.name' => $provider,
-                'gen_ai.response.model' => $model,
-                'gen_ai.completion' => $this->responseText($response, $this->value($event, ['output'])),
-                'gen_ai.usage.input_tokens' => $promptTokens,
-                'gen_ai.usage.output_tokens' => $completionTokens,
-                'tracefast.ai.conversation_id' => $this->stringValue(
-                    $this->value($event, ['conversationId', 'conversation_id'])
-                        ?? $this->value($response, ['conversationId', 'conversation_id'])
-                ),
+                'tracefast.ai.conversation_id' => $conversationId,
                 'tracefast.ai.response_type' => $responseType,
             ]),
+            'llm_span' => [
+                'output' => $output,
+                'attributes' => $this->attributes([
+                    'openinference.span.kind' => 'llm',
+                    'llm.provider' => $provider,
+                    'llm.model_name' => $model,
+                    'llm.token_count.prompt' => $promptTokens,
+                    'llm.token_count.completion' => $completionTokens,
+                    'gen_ai.system' => $provider,
+                    'gen_ai.provider.name' => $provider,
+                    'gen_ai.response.model' => $model,
+                    'gen_ai.completion' => $completion,
+                    'gen_ai.usage.input_tokens' => $promptTokens,
+                    'gen_ai.usage.output_tokens' => $completionTokens,
+                    'tracefast.ai.conversation_id' => $conversationId,
+                    'tracefast.ai.response_type' => $responseType,
+                ]),
+            ],
         ];
     }
 
@@ -212,6 +243,15 @@ final class LaravelAiEventMapper
         }
 
         return $fallback === 'agent' ? class_basename($event) : $fallback;
+    }
+
+    private function llmSpanName(?string $model): string
+    {
+        if ($model === null || trim($model) === '') {
+            return 'chat';
+        }
+
+        return "chat {$model}";
     }
 
     private function promptInput(mixed $prompt, mixed $fallback): mixed

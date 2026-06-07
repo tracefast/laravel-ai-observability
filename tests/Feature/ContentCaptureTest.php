@@ -24,17 +24,31 @@ it('captures prompt text and messages in full content mode', function (): void {
         'attributes' => [
             'openinference.span.kind' => 'agent',
             'tracefast.ai.invocation_id' => 'invocation-rich',
-            'llm.provider' => 'anthropic',
-            'llm.model_name' => 'claude-4-sonnet',
-            'gen_ai.operation.name' => 'chat',
-            'gen_ai.system' => 'anthropic',
-            'gen_ai.provider.name' => 'anthropic',
-            'gen_ai.request.model' => 'claude-4-sonnet',
-            'gen_ai.prompt' => 'Summarize the latest interview notes.',
-            'gen_ai.prompt_json' => json_encode([
-                ['role' => 'system', 'content' => 'Be concise.'],
-                ['role' => 'user', 'content' => 'Summarize the latest interview notes.'],
-            ], JSON_THROW_ON_ERROR),
+        ],
+        'llm_span' => [
+            'name' => 'chat claude-4-sonnet',
+            'input' => [
+                'value' => 'Summarize the latest interview notes.',
+                'messages' => [
+                    ['role' => 'system', 'content' => 'Be concise.'],
+                    ['role' => 'user', 'content' => 'Summarize the latest interview notes.'],
+                ],
+            ],
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+                'tracefast.ai.invocation_id' => 'invocation-rich',
+                'llm.provider' => 'anthropic',
+                'llm.model_name' => 'claude-4-sonnet',
+                'gen_ai.operation.name' => 'chat',
+                'gen_ai.system' => 'anthropic',
+                'gen_ai.provider.name' => 'anthropic',
+                'gen_ai.request.model' => 'claude-4-sonnet',
+                'gen_ai.prompt' => 'Summarize the latest interview notes.',
+                'gen_ai.prompt_json' => json_encode([
+                    ['role' => 'system', 'content' => 'Be concise.'],
+                    ['role' => 'user', 'content' => 'Summarize the latest interview notes.'],
+                ], JSON_THROW_ON_ERROR),
+            ],
         ],
     ]);
 });
@@ -80,7 +94,7 @@ it('normalizes laravel ai message objects into genai prompt json', function (): 
     config()->set('ai-observability.capture.content', 'full');
 
     $payload = (new LaravelAiEventMapper)->prompting(new ObjectMessagePromptingEvent);
-    $messages = json_decode($payload['attributes']['gen_ai.prompt_json'], true, flags: JSON_THROW_ON_ERROR);
+    $messages = json_decode($payload['llm_span']['attributes']['gen_ai.prompt_json'], true, flags: JSON_THROW_ON_ERROR);
 
     expect($messages)->toBe([
         ['role' => 'assistant', 'content' => 'Previous summary is available.'],
@@ -119,18 +133,48 @@ it('captures response value tool calls tool results and steps in full content mo
             ],
         ],
         'attributes' => [
-            'llm.provider' => 'anthropic',
-            'llm.model_name' => 'claude-4-sonnet',
-            'llm.token_count.prompt' => 31,
-            'llm.token_count.completion' => 12,
-            'gen_ai.system' => 'anthropic',
-            'gen_ai.provider.name' => 'anthropic',
-            'gen_ai.response.model' => 'claude-4-sonnet',
-            'gen_ai.completion' => 'Ada is a strong match.',
-            'gen_ai.usage.input_tokens' => 31,
-            'gen_ai.usage.output_tokens' => 12,
             'tracefast.ai.conversation_id' => 'conversation-rich',
             'tracefast.ai.response_type' => 'text',
+        ],
+        'llm_span' => [
+            'output' => [
+                'value' => 'Ada is a strong match.',
+                'tool_calls' => [
+                    [
+                        'id' => 'call-1',
+                        'name' => 'lookup_candidate',
+                        'arguments' => ['candidate_id' => 42],
+                    ],
+                ],
+                'tool_results' => [
+                    [
+                        'tool_call_id' => 'call-1',
+                        'result' => ['name' => 'Ada Lovelace'],
+                    ],
+                ],
+                'steps' => [
+                    [
+                        'type' => 'tool_call',
+                        'tool_call_id' => 'call-1',
+                        'content' => ['status' => 'complete'],
+                    ],
+                ],
+            ],
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+                'llm.provider' => 'anthropic',
+                'llm.model_name' => 'claude-4-sonnet',
+                'llm.token_count.prompt' => 31,
+                'llm.token_count.completion' => 12,
+                'gen_ai.system' => 'anthropic',
+                'gen_ai.provider.name' => 'anthropic',
+                'gen_ai.response.model' => 'claude-4-sonnet',
+                'gen_ai.completion' => 'Ada is a strong match.',
+                'gen_ai.usage.input_tokens' => 31,
+                'gen_ai.usage.output_tokens' => 12,
+                'tracefast.ai.conversation_id' => 'conversation-rich',
+                'tracefast.ai.response_type' => 'text',
+            ],
         ],
     ]);
 });
@@ -175,28 +219,44 @@ it('omits content payloads in off mode while preserving metadata', function (): 
         'attributes' => [
             'openinference.span.kind' => 'agent',
             'tracefast.ai.invocation_id' => 'invocation-rich',
-            'llm.provider' => 'anthropic',
-            'llm.model_name' => 'claude-4-sonnet',
-            'gen_ai.operation.name' => 'chat',
-            'gen_ai.system' => 'anthropic',
-            'gen_ai.provider.name' => 'anthropic',
-            'gen_ai.request.model' => 'claude-4-sonnet',
+        ],
+        'llm_span' => [
+            'name' => 'chat claude-4-sonnet',
+            'input' => null,
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+                'tracefast.ai.invocation_id' => 'invocation-rich',
+                'llm.provider' => 'anthropic',
+                'llm.model_name' => 'claude-4-sonnet',
+                'gen_ai.operation.name' => 'chat',
+                'gen_ai.system' => 'anthropic',
+                'gen_ai.provider.name' => 'anthropic',
+                'gen_ai.request.model' => 'claude-4-sonnet',
+            ],
         ],
     ])->and($mapper->prompted(new RichPromptedEvent))->toMatchArray([
         'invocation_id' => 'invocation-rich',
         'output' => null,
         'attributes' => [
-            'llm.provider' => 'anthropic',
-            'llm.model_name' => 'claude-4-sonnet',
-            'llm.token_count.prompt' => 31,
-            'llm.token_count.completion' => 12,
-            'gen_ai.system' => 'anthropic',
-            'gen_ai.provider.name' => 'anthropic',
-            'gen_ai.response.model' => 'claude-4-sonnet',
-            'gen_ai.usage.input_tokens' => 31,
-            'gen_ai.usage.output_tokens' => 12,
             'tracefast.ai.conversation_id' => 'conversation-rich',
             'tracefast.ai.response_type' => 'text',
+        ],
+        'llm_span' => [
+            'output' => null,
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+                'llm.provider' => 'anthropic',
+                'llm.model_name' => 'claude-4-sonnet',
+                'llm.token_count.prompt' => 31,
+                'llm.token_count.completion' => 12,
+                'gen_ai.system' => 'anthropic',
+                'gen_ai.provider.name' => 'anthropic',
+                'gen_ai.response.model' => 'claude-4-sonnet',
+                'gen_ai.usage.input_tokens' => 31,
+                'gen_ai.usage.output_tokens' => 12,
+                'tracefast.ai.conversation_id' => 'conversation-rich',
+                'tracefast.ai.response_type' => 'text',
+            ],
         ],
     ])->and($mapper->invokingTool(new RichInvokingToolEvent))->toMatchArray([
         'invocation_id' => 'invocation-rich',

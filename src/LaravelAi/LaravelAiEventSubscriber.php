@@ -33,6 +33,11 @@ final class LaravelAiEventSubscriber
     /**
      * @var array<string, Span>
      */
+    private array $llmSpans = [];
+
+    /**
+     * @var array<string, Span>
+     */
     private array $toolSpans = [];
 
     public function __construct(
@@ -64,6 +69,7 @@ final class LaravelAiEventSubscriber
 
             $now = Clock::now();
             $traceId = Ids::traceId();
+            $trace = new Trace(traceId: $traceId, name: $payload['name'], startedAt: $now);
             $rootSpan = new Span(
                 traceId: $traceId,
                 spanId: Ids::spanId(),
@@ -74,12 +80,20 @@ final class LaravelAiEventSubscriber
                 attributes: $payload['attributes'],
                 input: $payload['input'],
             );
-
-            $this->registry->start(
-                $invocationId,
-                new Trace(traceId: $traceId, name: $payload['name'], startedAt: $now),
-                $rootSpan,
+            $llmSpan = new Span(
+                traceId: $traceId,
+                spanId: Ids::spanId(),
+                parentSpanId: $rootSpan->spanId(),
+                name: $payload['llm_span']['name'],
+                kind: SpanKind::Llm,
+                startedAt: $now,
+                attributes: $payload['llm_span']['attributes'],
+                input: $payload['llm_span']['input'],
             );
+
+            $this->registry->start($invocationId, $trace, $rootSpan);
+            $trace->addSpan($llmSpan);
+            $this->llmSpans[$invocationId] = $llmSpan;
         } catch (Throwable $exception) {
             report($exception);
         }
@@ -175,8 +189,17 @@ final class LaravelAiEventSubscriber
                 return;
             }
 
+            $llmSpan = $this->llmSpans[$invocationId] ?? null;
+
             $rootSpan->withOutput($payload['output']);
             $rootSpan->withAttributes($payload['attributes']);
+
+            if ($llmSpan !== null) {
+                $llmSpan->withOutput($payload['llm_span']['output']);
+                $llmSpan->withAttributes($payload['llm_span']['attributes']);
+                $llmSpan->finish(status: SpanStatus::Ok);
+            }
+
             $rootSpan->finish(status: SpanStatus::Ok);
             $trace->finish(status: SpanStatus::Ok);
 
@@ -187,6 +210,7 @@ final class LaravelAiEventSubscriber
             if ($invocationId !== null) {
                 $this->registry->forget($invocationId);
                 $this->forgetToolSpans($invocationId);
+                $this->forgetLlmSpan($invocationId);
             }
         }
     }
@@ -224,6 +248,11 @@ final class LaravelAiEventSubscriber
     private function toolKey(string $invocationId, string $toolInvocationId): string
     {
         return "{$invocationId}:{$toolInvocationId}";
+    }
+
+    private function forgetLlmSpan(string $invocationId): void
+    {
+        unset($this->llmSpans[$invocationId]);
     }
 
     private function forgetToolSpans(string $invocationId): void

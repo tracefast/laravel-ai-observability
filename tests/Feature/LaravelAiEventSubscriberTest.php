@@ -117,7 +117,7 @@ it('subscribes laravel ai lifecycle events to their handlers', function (): void
     app(LaravelAiEventSubscriber::class)->subscribe($dispatcher);
 });
 
-it('exports an agent lifecycle trace and forgets registry state', function (): void {
+it('exports an agent lifecycle trace with a child llm span and forgets registry state', function (): void {
     config()->set('ai-observability.enabled', true);
     config()->set('ai-observability.default', 'capturing');
     config()->set('ai-observability.exporters.capturing', ['driver' => 'capturing']);
@@ -147,7 +147,7 @@ it('exports an agent lifecycle trace and forgets registry state', function (): v
         'name' => 'Screening Agent',
         'status' => 'ok',
     ])
-        ->and($trace['spans'])->toHaveCount(2)
+        ->and($trace['spans'])->toHaveCount(3)
         ->and($trace['spans'][0])->toMatchArray([
             'name' => 'Screening Agent',
             'kind' => 'agent',
@@ -158,10 +158,32 @@ it('exports an agent lifecycle trace and forgets registry state', function (): v
         ->and($trace['spans'][0]['attributes'])->toMatchArray([
             'tracefast.ai.invocation_id' => 'invocation-123',
             'tracefast.ai.conversation_id' => 'conversation-456',
-            'llm.token_count.prompt' => 17,
-            'llm.token_count.completion' => 8,
+            'tracefast.ai.response_type' => 'text',
+        ])
+        ->and($trace['spans'][0]['attributes'])->not->toHaveKeys([
+            'llm.token_count.prompt',
+            'llm.token_count.completion',
+            'gen_ai.usage.input_tokens',
+            'gen_ai.usage.output_tokens',
         ])
         ->and($trace['spans'][1])->toMatchArray([
+            'name' => 'chat gpt-4.1-mini',
+            'kind' => 'llm',
+            'parent_span_id' => $trace['spans'][0]['span_id'],
+            'status' => 'ok',
+            'input' => 'Summarize this candidate.',
+            'output' => 'The candidate is a strong fit.',
+        ])
+        ->and($trace['spans'][1]['attributes'])->toMatchArray([
+            'openinference.span.kind' => 'llm',
+            'tracefast.ai.invocation_id' => 'invocation-123',
+            'tracefast.ai.conversation_id' => 'conversation-456',
+            'llm.token_count.prompt' => 17,
+            'llm.token_count.completion' => 8,
+            'gen_ai.usage.input_tokens' => 17,
+            'gen_ai.usage.output_tokens' => 8,
+        ])
+        ->and($trace['spans'][2])->toMatchArray([
             'name' => 'lookup_candidate',
             'kind' => 'tool',
             'parent_span_id' => $trace['spans'][0]['span_id'],
@@ -169,7 +191,7 @@ it('exports an agent lifecycle trace and forgets registry state', function (): v
             'input' => ['candidate_id' => 42],
             'output' => ['name' => 'Ada Lovelace'],
         ])
-        ->and($trace['spans'][1]['attributes'])->toMatchArray([
+        ->and($trace['spans'][2]['attributes'])->toMatchArray([
             'tool.call.id' => 'tool-call-789',
         ]);
 });
@@ -211,13 +233,15 @@ it('forgets registry and tool spans when prompted mapping throws after invocatio
     $subscriber->handleInvokingTool(new FakeInvokingToolEvent);
 
     expect($registry->trace('invocation-123'))->not->toBeNull()
-        ->and(toolSpans($subscriber))->toHaveCount(1);
+        ->and(toolSpans($subscriber))->toHaveCount(1)
+        ->and(llmSpans($subscriber))->toHaveCount(1);
 
     $subscriber->handlePrompted(new ThrowingPromptedEvent);
 
     expect($registry->trace('invocation-123'))->toBeNull()
         ->and($registry->rootSpan('invocation-123'))->toBeNull()
-        ->and(toolSpans($subscriber))->toBe([]);
+        ->and(toolSpans($subscriber))->toBe([])
+        ->and(llmSpans($subscriber))->toBe([]);
 });
 
 it('reports non-terminal handler failures without throwing into application code', function (): void {
@@ -294,6 +318,16 @@ it('throws a controlled exception for unmapped event classes', function (): void
 function toolSpans(LaravelAiEventSubscriber $subscriber): array
 {
     $property = new ReflectionProperty($subscriber, 'toolSpans');
+
+    return $property->getValue($subscriber);
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function llmSpans(LaravelAiEventSubscriber $subscriber): array
+{
+    $property = new ReflectionProperty($subscriber, 'llmSpans');
 
     return $property->getValue($subscriber);
 }

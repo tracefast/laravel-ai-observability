@@ -41,7 +41,7 @@ it('stores and forgets traces by invocation id', function (): void {
         ->and($registry->rootSpan('invocation-123'))->toBeNull();
 });
 
-it('maps prompting events into root agent span fields', function (): void {
+it('maps prompting events into agent and llm span fields', function (): void {
     $payload = (new LaravelAiEventMapper)->prompting(new FakePromptingEvent);
 
     expect($payload)->toMatchArray([
@@ -51,41 +51,74 @@ it('maps prompting events into root agent span fields', function (): void {
         'attributes' => [
             'openinference.span.kind' => 'agent',
             'tracefast.ai.invocation_id' => 'invocation-123',
-            'llm.provider' => 'openai',
-            'llm.model_name' => 'gpt-4.1-mini',
-            'gen_ai.operation.name' => 'chat',
-            'gen_ai.system' => 'openai',
-            'gen_ai.provider.name' => 'openai',
-            'gen_ai.request.model' => 'gpt-4.1-mini',
-            'gen_ai.prompt' => 'Summarize this candidate.',
+        ],
+        'llm_span' => [
+            'name' => 'chat gpt-4.1-mini',
+            'input' => 'Summarize this candidate.',
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+                'tracefast.ai.invocation_id' => 'invocation-123',
+                'llm.provider' => 'openai',
+                'llm.model_name' => 'gpt-4.1-mini',
+                'gen_ai.operation.name' => 'chat',
+                'gen_ai.system' => 'openai',
+                'gen_ai.provider.name' => 'openai',
+                'gen_ai.request.model' => 'gpt-4.1-mini',
+                'gen_ai.prompt' => 'Summarize this candidate.',
+            ],
         ],
     ]);
 });
 
-it('maps prompted events with response output and usage fields', function (): void {
+it('maps prompted events with root response metadata and llm usage fields', function (): void {
     $payload = (new LaravelAiEventMapper)->prompted(new FakePromptedEvent);
 
     expect($payload)->toMatchArray([
         'invocation_id' => 'invocation-123',
         'output' => 'The candidate is a strong fit.',
         'attributes' => [
-            'llm.provider' => 'openai',
-            'llm.model_name' => 'gpt-4.1-mini',
-            'llm.token_count.prompt' => 17,
-            'llm.token_count.completion' => 8,
-            'gen_ai.system' => 'openai',
-            'gen_ai.provider.name' => 'openai',
-            'gen_ai.response.model' => 'gpt-4.1-mini',
-            'gen_ai.completion' => 'The candidate is a strong fit.',
-            'gen_ai.usage.input_tokens' => 17,
-            'gen_ai.usage.output_tokens' => 8,
             'tracefast.ai.conversation_id' => 'conversation-456',
             'tracefast.ai.response_type' => 'text',
+        ],
+        'llm_span' => [
+            'output' => 'The candidate is a strong fit.',
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+                'llm.provider' => 'openai',
+                'llm.model_name' => 'gpt-4.1-mini',
+                'llm.token_count.prompt' => 17,
+                'llm.token_count.completion' => 8,
+                'gen_ai.system' => 'openai',
+                'gen_ai.provider.name' => 'openai',
+                'gen_ai.response.model' => 'gpt-4.1-mini',
+                'gen_ai.completion' => 'The candidate is a strong fit.',
+                'gen_ai.usage.input_tokens' => 17,
+                'gen_ai.usage.output_tokens' => 8,
+                'tracefast.ai.conversation_id' => 'conversation-456',
+                'tracefast.ai.response_type' => 'text',
+            ],
         ],
     ]);
 });
 
-it('adds scoped observation attributes to mapped agent and tool spans', function (): void {
+it('does not attach llm usage fields to root agent mapper attributes', function (): void {
+    $promptingPayload = (new LaravelAiEventMapper)->prompting(new FakePromptingEvent);
+    $promptedPayload = (new LaravelAiEventMapper)->prompted(new FakePromptedEvent);
+
+    expect($promptingPayload['attributes'])->not->toHaveKeys([
+        'llm.provider',
+        'llm.model_name',
+        'gen_ai.operation.name',
+        'gen_ai.request.model',
+    ])->and($promptedPayload['attributes'])->not->toHaveKeys([
+        'llm.token_count.prompt',
+        'llm.token_count.completion',
+        'gen_ai.usage.input_tokens',
+        'gen_ai.usage.output_tokens',
+    ]);
+});
+
+it('adds scoped observation attributes to mapped agent llm and tool spans', function (): void {
     $context = new ObservationContext;
 
     $context->withAttributes([
@@ -93,11 +126,19 @@ it('adds scoped observation attributes to mapped agent and tool spans', function
         'user.id' => 42,
     ], function () use ($context): void {
         $mapper = new LaravelAiEventMapper($context);
+        $promptingPayload = $mapper->prompting(new FakePromptingEvent);
+        $promptedPayload = $mapper->prompted(new FakePromptedEvent);
 
-        expect($mapper->prompting(new FakePromptingEvent)['attributes'])->toMatchArray([
+        expect($promptingPayload['attributes'])->toMatchArray([
             'session.id' => 'conversation-123',
             'user.id' => '42',
-        ])->and($mapper->prompted(new FakePromptedEvent)['attributes'])->toMatchArray([
+        ])->and($promptingPayload['llm_span']['attributes'])->toMatchArray([
+            'session.id' => 'conversation-123',
+            'user.id' => '42',
+        ])->and($promptedPayload['attributes'])->toMatchArray([
+            'session.id' => 'conversation-123',
+            'user.id' => '42',
+        ])->and($promptedPayload['llm_span']['attributes'])->toMatchArray([
             'session.id' => 'conversation-123',
             'user.id' => '42',
         ])->and($mapper->invokingTool(new FakeInvokingToolEvent)['attributes'])->toMatchArray([
@@ -110,7 +151,8 @@ it('adds scoped observation attributes to mapped agent and tool spans', function
 it('falls back to the response class basename when response type is not explicit', function (): void {
     $payload = (new LaravelAiEventMapper)->prompted(new FakePromptedEventWithoutResponseType);
 
-    expect($payload['attributes']['tracefast.ai.response_type'])->toBe('FakeResponseWithoutType');
+    expect($payload['attributes']['tracefast.ai.response_type'])->toBe('FakeResponseWithoutType')
+        ->and($payload['llm_span']['attributes']['tracefast.ai.response_type'])->toBe('FakeResponseWithoutType');
 });
 
 it('maps tool invocation arguments and results', function (): void {
@@ -165,9 +207,23 @@ it('maps null-like events without crashing', function (): void {
         'attributes' => [
             'openinference.span.kind' => 'agent',
         ],
+        'llm_span' => [
+            'name' => 'chat',
+            'input' => null,
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+            ],
+        ],
     ])->and($mapper->prompted($event))->toMatchArray([
         'invocation_id' => null,
         'output' => null,
+        'attributes' => [],
+        'llm_span' => [
+            'output' => null,
+            'attributes' => [
+                'openinference.span.kind' => 'llm',
+            ],
+        ],
     ])->and($mapper->invokingTool($event))->toMatchArray([
         'invocation_id' => null,
         'tool_invocation_id' => null,
