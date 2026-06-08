@@ -22,7 +22,7 @@ it('captures prompt text and messages in full content mode', function (): void {
             ],
         ],
         'attributes' => [
-            'openinference.span.kind' => 'agent',
+            'openinference.span.kind' => 'AGENT',
             'tracefast.ai.invocation_id' => 'invocation-rich',
         ],
         'llm_span' => [
@@ -35,7 +35,8 @@ it('captures prompt text and messages in full content mode', function (): void {
                 ],
             ],
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'anthropic',
                 'tracefast.ai.invocation_id' => 'invocation-rich',
                 'llm.provider' => 'anthropic',
                 'llm.model_name' => 'claude-4-sonnet',
@@ -48,6 +49,10 @@ it('captures prompt text and messages in full content mode', function (): void {
                     ['role' => 'system', 'content' => 'Be concise.'],
                     ['role' => 'user', 'content' => 'Summarize the latest interview notes.'],
                 ], JSON_THROW_ON_ERROR),
+                'llm.input_messages.0.message.role' => 'system',
+                'llm.input_messages.0.message.content' => 'Be concise.',
+                'llm.input_messages.1.message.role' => 'user',
+                'llm.input_messages.1.message.content' => 'Summarize the latest interview notes.',
             ],
         ],
     ]);
@@ -97,8 +102,16 @@ it('normalizes laravel ai message objects into genai prompt json', function (): 
     $messages = json_decode($payload['llm_span']['attributes']['gen_ai.prompt_json'], true, flags: JSON_THROW_ON_ERROR);
 
     expect($messages)->toBe([
+        ['role' => 'system', 'content' => 'Be direct.'],
         ['role' => 'assistant', 'content' => 'Previous summary is available.'],
         ['role' => 'user', 'content' => 'Summarize the uploaded resume.'],
+    ])->and($payload['llm_span']['attributes'])->toMatchArray([
+        'llm.input_messages.0.message.role' => 'system',
+        'llm.input_messages.0.message.content' => 'Be direct.',
+        'llm.input_messages.1.message.role' => 'assistant',
+        'llm.input_messages.1.message.content' => 'Previous summary is available.',
+        'llm.input_messages.2.message.role' => 'user',
+        'llm.input_messages.2.message.content' => 'Summarize the uploaded resume.',
     ]);
 });
 
@@ -161,11 +174,13 @@ it('captures response value tool calls tool results and steps in full content mo
                 ],
             ],
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'anthropic',
                 'llm.provider' => 'anthropic',
                 'llm.model_name' => 'claude-4-sonnet',
                 'llm.token_count.prompt' => 31,
                 'llm.token_count.completion' => 12,
+                'llm.token_count.total' => 43,
                 'gen_ai.system' => 'anthropic',
                 'gen_ai.provider.name' => 'anthropic',
                 'gen_ai.response.model' => 'claude-4-sonnet',
@@ -174,6 +189,11 @@ it('captures response value tool calls tool results and steps in full content mo
                 'gen_ai.usage.output_tokens' => 12,
                 'tracefast.ai.conversation_id' => 'conversation-rich',
                 'tracefast.ai.response_type' => 'text',
+                'llm.output_messages.0.message.role' => 'assistant',
+                'llm.output_messages.0.message.content' => 'Ada is a strong match.',
+                'llm.output_messages.0.message.tool_calls.0.tool_call.id' => 'call-1',
+                'llm.output_messages.0.message.tool_calls.0.tool_call.function.name' => 'lookup_candidate',
+                'llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments' => '{"candidate_id":42}',
             ],
         ],
     ]);
@@ -193,8 +213,9 @@ it('captures tool arguments and results in full content mode', function (): void
             'options' => ['include_notes' => true],
         ],
         'attributes' => [
-            'openinference.span.kind' => 'tool',
+            'openinference.span.kind' => 'TOOL',
             'tool.name' => 'lookup_candidate',
+            'tool.id' => 'call-1',
             'tool.call.id' => 'call-1',
         ],
     ])->and($mapper->toolInvoked(new RichToolInvokedEvent))->toMatchArray([
@@ -217,14 +238,15 @@ it('omits content payloads in off mode while preserving metadata', function (): 
         'name' => 'Research Agent',
         'input' => null,
         'attributes' => [
-            'openinference.span.kind' => 'agent',
+            'openinference.span.kind' => 'AGENT',
             'tracefast.ai.invocation_id' => 'invocation-rich',
         ],
         'llm_span' => [
             'name' => 'chat claude-4-sonnet',
             'input' => null,
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'anthropic',
                 'tracefast.ai.invocation_id' => 'invocation-rich',
                 'llm.provider' => 'anthropic',
                 'llm.model_name' => 'claude-4-sonnet',
@@ -244,11 +266,13 @@ it('omits content payloads in off mode while preserving metadata', function (): 
         'llm_span' => [
             'output' => null,
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'anthropic',
                 'llm.provider' => 'anthropic',
                 'llm.model_name' => 'claude-4-sonnet',
                 'llm.token_count.prompt' => 31,
                 'llm.token_count.completion' => 12,
+                'llm.token_count.total' => 43,
                 'gen_ai.system' => 'anthropic',
                 'gen_ai.provider.name' => 'anthropic',
                 'gen_ai.response.model' => 'claude-4-sonnet',
@@ -264,8 +288,9 @@ it('omits content payloads in off mode while preserving metadata', function (): 
         'name' => 'lookup_candidate',
         'input' => null,
         'attributes' => [
-            'openinference.span.kind' => 'tool',
+            'openinference.span.kind' => 'TOOL',
             'tool.name' => 'lookup_candidate',
+            'tool.id' => 'call-1',
             'tool.call.id' => 'call-1',
         ],
     ])->and($mapper->toolInvoked(new RichToolInvokedEvent))->toMatchArray([

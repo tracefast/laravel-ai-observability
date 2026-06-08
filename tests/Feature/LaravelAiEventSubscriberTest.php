@@ -175,13 +175,19 @@ it('exports an agent lifecycle trace with a child llm span and forgets registry 
             'output' => 'The candidate is a strong fit.',
         ])
         ->and($trace['spans'][1]['attributes'])->toMatchArray([
-            'openinference.span.kind' => 'llm',
+            'openinference.span.kind' => 'LLM',
+            'llm.system' => 'openai',
             'tracefast.ai.invocation_id' => 'invocation-123',
             'tracefast.ai.conversation_id' => 'conversation-456',
             'llm.token_count.prompt' => 17,
             'llm.token_count.completion' => 8,
+            'llm.token_count.total' => 25,
             'gen_ai.usage.input_tokens' => 17,
             'gen_ai.usage.output_tokens' => 8,
+            'llm.input_messages.0.message.role' => 'user',
+            'llm.input_messages.0.message.content' => 'Summarize this candidate.',
+            'llm.output_messages.0.message.role' => 'assistant',
+            'llm.output_messages.0.message.content' => 'The candidate is a strong fit.',
         ])
         ->and($trace['spans'][2])->toMatchArray([
             'name' => 'lookup_candidate',
@@ -192,6 +198,8 @@ it('exports an agent lifecycle trace with a child llm span and forgets registry 
             'output' => ['name' => 'Ada Lovelace'],
         ])
         ->and($trace['spans'][2]['attributes'])->toMatchArray([
+            'openinference.span.kind' => 'TOOL',
+            'tool.id' => 'tool-call-789',
             'tool.call.id' => 'tool-call-789',
         ]);
 });

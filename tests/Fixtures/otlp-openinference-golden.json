@@ -48,9 +48,27 @@
               "name": "llm completion",
               "attributes": [
                 {
-                  "key": "openinference.span.kind",
+                  "key": "llm.model_name",
                   "value": {
-                    "stringValue": "llm"
+                    "stringValue": "gpt-4.1"
+                  }
+                },
+                {
+                  "key": "session.id",
+                  "value": {
+                    "stringValue": "candidate-coach-123"
+                  }
+                },
+                {
+                  "key": "user.id",
+                  "value": {
+                    "stringValue": "42"
+                  }
+                },
+                {
+                  "key": "tracefast.ai.conversation_id",
+                  "value": {
+                    "stringValue": "candidate-coach-123"
                   }
                 },
                 {
@@ -84,27 +102,15 @@
                   }
                 },
                 {
-                  "key": "llm.model_name",
+                  "key": "openinference.span.kind",
                   "value": {
-                    "stringValue": "gpt-4.1"
+                    "stringValue": "LLM"
                   }
                 },
                 {
-                  "key": "session.id",
+                  "key": "llm.system",
                   "value": {
-                    "stringValue": "candidate-coach-123"
-                  }
-                },
-                {
-                  "key": "user.id",
-                  "value": {
-                    "stringValue": "42"
-                  }
-                },
-                {
-                  "key": "tracefast.ai.conversation_id",
-                  "value": {
-                    "stringValue": "candidate-coach-123"
+                    "stringValue": "unknown"
                   }
                 },
                 {
@@ -114,9 +120,21 @@
                   }
                 },
                 {
+                  "key": "input.mime_type",
+                  "value": {
+                    "stringValue": "application/json"
+                  }
+                },
+                {
                   "key": "output.value",
                   "value": {
                     "stringValue": "{\"content\":\"Hi there\"}"
+                  }
+                },
+                {
+                  "key": "output.mime_type",
+                  "value": {
+                    "stringValue": "application/json"
                   }
                 }
               ],

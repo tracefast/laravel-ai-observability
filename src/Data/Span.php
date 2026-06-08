@@ -89,6 +89,19 @@ final class Span
      */
     public function toArray(): array
     {
+        $attributes = array_merge($this->attributes, [
+            'openinference.schema.version' => PackageInfo::OpenInferenceSchemaVersion,
+            'tracefast.ai.package.name' => PackageInfo::Name,
+            'tracefast.ai.package.version' => PackageInfo::packageVersion(),
+            'tracefast.ai.sdk.name' => PackageInfo::LaravelAiName,
+            'tracefast.ai.sdk.version' => PackageInfo::laravelAiVersion(),
+            'openinference.span.kind' => $this->kind->openInferenceValue(),
+        ]);
+
+        if ($this->kind === SpanKind::Llm && ! array_key_exists('llm.system', $attributes)) {
+            $attributes['llm.system'] = 'unknown';
+        }
+
         return [
             'trace_id' => $this->traceId,
             'span_id' => $this->spanId,
@@ -99,14 +112,7 @@ final class Span
             'started_at' => $this->startedAt,
             'ended_at' => $this->endedAt,
             'duration_ms' => Clock::durationMs($this->startedAt, $this->endedAt),
-            'attributes' => array_merge([
-                'openinference.span.kind' => $this->kind->value,
-                'openinference.schema.version' => PackageInfo::OpenInferenceSchemaVersion,
-                'tracefast.ai.package.name' => PackageInfo::Name,
-                'tracefast.ai.package.version' => PackageInfo::packageVersion(),
-                'tracefast.ai.sdk.name' => PackageInfo::LaravelAiName,
-                'tracefast.ai.sdk.version' => PackageInfo::laravelAiVersion(),
-            ], $this->attributes),
+            'attributes' => $attributes,
             'input' => $this->input,
             'output' => $this->output,
             'error_type' => $this->errorType,

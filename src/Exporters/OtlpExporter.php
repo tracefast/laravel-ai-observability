@@ -207,6 +207,15 @@ final class OtlpExporter implements Exporter
                 'key' => $key,
                 'value' => $this->attributeValue($payload[$source]),
             ];
+
+            $mimeTypeKey = "{$source}.mime_type";
+
+            if (! is_array($sourceAttributes) || ! array_key_exists($mimeTypeKey, $sourceAttributes)) {
+                $attributes[] = [
+                    'key' => $mimeTypeKey,
+                    'value' => ['stringValue' => $this->mimeType($payload[$source])],
+                ];
+            }
         }
 
         return $attributes;
@@ -250,6 +259,15 @@ final class OtlpExporter implements Exporter
             SpanStatus::Error->value => ['code' => 2],
             default => ['code' => 0],
         };
+    }
+
+    private function mimeType(mixed $value): string
+    {
+        if (is_array($value) || is_object($value)) {
+            return 'application/json';
+        }
+
+        return 'text/plain';
     }
 
     private function unixNano(mixed $value): ?string

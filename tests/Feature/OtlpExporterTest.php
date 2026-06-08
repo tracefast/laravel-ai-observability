@@ -283,8 +283,16 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
                 'value' => ['stringValue' => '{"messages":[{"role":"user","content":"Hello"}]}'],
             ])
             ->and($span['attributes'])->toContain([
+                'key' => 'input.mime_type',
+                'value' => ['stringValue' => 'application/json'],
+            ])
+            ->and($span['attributes'])->toContain([
                 'key' => 'output.value',
                 'value' => ['stringValue' => '{"content":"Hi there"}'],
+            ])
+            ->and($span['attributes'])->toContain([
+                'key' => 'output.mime_type',
+                'value' => ['stringValue' => 'application/json'],
             ]);
 
         return true;

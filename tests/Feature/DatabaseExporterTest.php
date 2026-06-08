@@ -94,7 +94,8 @@ it('stores trace and span rows', function (): void {
         ->and(json_decode($spanRow->attributes, true, flags: JSON_THROW_ON_ERROR))
         ->toMatchArray([
             'llm.model_name' => 'gpt-4.1',
-            'openinference.span.kind' => 'llm',
+            'llm.system' => 'unknown',
+            'openinference.span.kind' => 'LLM',
             'openinference.schema.version' => '1.0.0',
             'tracefast.ai.package.name' => 'tracefast/laravel-ai-observability',
             'tracefast.ai.package.version' => 'dev-main',
@@ -109,7 +110,8 @@ it('stores trace and span rows', function (): void {
             'span_id' => 'span_database_123',
             'attributes' => [
                 'llm.model_name' => 'gpt-4.1',
-                'openinference.span.kind' => 'llm',
+                'llm.system' => 'unknown',
+                'openinference.span.kind' => 'LLM',
                 'openinference.schema.version' => '1.0.0',
                 'tracefast.ai.package.name' => 'tracefast/laravel-ai-observability',
                 'tracefast.ai.package.version' => 'dev-main',

@@ -52,8 +52,9 @@ final class LaravelAiEventMapper
                 ?? $this->value($prompt, ['model', 'modelName', 'model_name'])
                 ?? $this->value($agent, ['model', 'modelName', 'model_name'])
         );
+        $inputMessages = $this->normalizedPromptMessages($prompt, $agent, $eventInput);
         $promptText = $this->promptText($prompt, $eventInput);
-        $promptMessages = $this->promptJson($prompt, $agent, $eventInput);
+        $promptMessages = $this->messagesJson($inputMessages);
         $input = $this->promptInput($prompt, $eventInput);
 
         return [
@@ -61,14 +62,15 @@ final class LaravelAiEventMapper
             'name' => $this->name($event, $agent, 'agent'),
             'input' => $input,
             'attributes' => $this->attributes([
-                'openinference.span.kind' => 'agent',
+                'openinference.span.kind' => 'AGENT',
                 'tracefast.ai.invocation_id' => $invocationId,
             ]),
             'llm_span' => [
                 'name' => $this->llmSpanName($model),
                 'input' => $input,
-                'attributes' => $this->attributes([
-                    'openinference.span.kind' => 'llm',
+                'attributes' => $this->attributes(array_merge([
+                    'openinference.span.kind' => 'LLM',
+                    'llm.system' => $this->llmSystem($provider),
                     'tracefast.ai.invocation_id' => $invocationId,
                     'llm.provider' => $provider,
                     'llm.model_name' => $model,
@@ -78,7 +80,7 @@ final class LaravelAiEventMapper
                     'gen_ai.request.model' => $model,
                     'gen_ai.prompt' => $promptText,
                     'gen_ai.prompt_json' => $promptMessages,
-                ]),
+                ], $this->messageAttributes('llm.input_messages', $inputMessages))),
             ],
         ];
     }
@@ -114,6 +116,7 @@ final class LaravelAiEventMapper
         );
         $promptTokens = $this->value($usage, ['promptTokens', 'prompt_tokens', 'inputTokens', 'input_tokens']);
         $completionTokens = $this->value($usage, ['completionTokens', 'completion_tokens', 'outputTokens', 'output_tokens']);
+        $totalTokens = $this->tokenTotal($promptTokens, $completionTokens);
         $responseType = $this->stringValue($this->value($event, ['responseType', 'response_type', 'type']) ?? $this->value($response, ['responseType', 'response_type', 'type']))
             ?? (is_object($response) ? class_basename($response) : null);
         $conversationId = $this->stringValue(
@@ -122,6 +125,7 @@ final class LaravelAiEventMapper
         );
         $output = $this->responseOutput($response, $this->value($event, ['output']));
         $completion = $this->responseText($response, $this->value($event, ['output']));
+        $outputMessages = $this->responseMessages($response, $completion);
 
         return [
             'invocation_id' => $this->stringValue(
@@ -136,12 +140,14 @@ final class LaravelAiEventMapper
             ]),
             'llm_span' => [
                 'output' => $output,
-                'attributes' => $this->attributes([
-                    'openinference.span.kind' => 'llm',
+                'attributes' => $this->attributes(array_merge([
+                    'openinference.span.kind' => 'LLM',
+                    'llm.system' => $this->llmSystem($provider),
                     'llm.provider' => $provider,
                     'llm.model_name' => $model,
                     'llm.token_count.prompt' => $promptTokens,
                     'llm.token_count.completion' => $completionTokens,
+                    'llm.token_count.total' => $totalTokens,
                     'gen_ai.system' => $provider,
                     'gen_ai.provider.name' => $provider,
                     'gen_ai.response.model' => $model,
@@ -150,7 +156,7 @@ final class LaravelAiEventMapper
                     'gen_ai.usage.output_tokens' => $completionTokens,
                     'tracefast.ai.conversation_id' => $conversationId,
                     'tracefast.ai.response_type' => $responseType,
-                ]),
+                ], $this->messageAttributes('llm.output_messages', $outputMessages))),
             ],
         ];
     }
@@ -170,8 +176,9 @@ final class LaravelAiEventMapper
             'name' => $name,
             'input' => $this->captured($this->value($event, ['arguments', 'args', 'input'])),
             'attributes' => $this->attributes([
-                'openinference.span.kind' => 'tool',
+                'openinference.span.kind' => 'TOOL',
                 'tool.name' => $name,
+                'tool.id' => $toolInvocationId,
                 'tool.call.id' => $toolInvocationId,
             ]),
         ];
@@ -305,25 +312,6 @@ final class LaravelAiEventMapper
         return $messages === [] ? null : $messages;
     }
 
-    private function promptJson(mixed $prompt, mixed $agent, mixed $fallback): ?string
-    {
-        if (! $this->capturesContent()) {
-            return null;
-        }
-
-        $value = $this->value($prompt, ['input', 'prompt', 'text', 'content', 'message']);
-        $attachments = $this->value($prompt, ['attachments']);
-        $instructions = $this->value($prompt, ['instructions']) ?? $this->value($agent, ['instructions']);
-        $messages = $this->promptMessages($prompt, $agent, $value ?? $fallback, $attachments, $instructions);
-        $messages = $this->normalizedMessages($messages);
-
-        if ($messages === []) {
-            return null;
-        }
-
-        return json_encode($messages, JSON_THROW_ON_ERROR);
-    }
-
     private function promptText(mixed $prompt, mixed $fallback): ?string
     {
         if (! $this->capturesContent()) {
@@ -370,6 +358,70 @@ final class LaravelAiEventMapper
         );
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function normalizedPromptMessages(mixed $prompt, mixed $agent, mixed $fallback): array
+    {
+        if (! $this->capturesContent()) {
+            return [];
+        }
+
+        $value = $this->value($prompt, ['input', 'prompt', 'text', 'content', 'message']);
+        $attachments = $this->value($prompt, ['attachments']);
+        $instructions = $this->value($prompt, ['instructions']) ?? $this->value($agent, ['instructions']);
+        $messages = $this->normalizedMessages(
+            $this->promptMessages($prompt, $agent, $value ?? $fallback, $attachments, $instructions),
+        );
+
+        if ($messages !== []) {
+            return $this->withInstructionMessage($messages, $instructions);
+        }
+
+        $content = $this->stringValue($value ?? $fallback);
+
+        if ($content === null) {
+            return [];
+        }
+
+        return $this->withInstructionMessage([
+            [
+                'role' => 'user',
+                'content' => $content,
+            ],
+        ], $instructions);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function responseMessages(mixed $response, ?string $completion): array
+    {
+        if (! $this->capturesContent()) {
+            return [];
+        }
+
+        $message = [
+            'role' => 'assistant',
+            'content' => $completion,
+            'tool_calls' => $this->serializable($this->value($response, ['toolCalls', 'tool_calls'])),
+        ];
+
+        return Arr::withoutNulls($message) === ['role' => 'assistant'] ? [] : [Arr::withoutNulls($message)];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $messages
+     */
+    private function messagesJson(array $messages): ?string
+    {
+        if ($messages === []) {
+            return null;
+        }
+
+        return json_encode($messages, JSON_THROW_ON_ERROR);
+    }
+
     private function captured(mixed $value): mixed
     {
         if (! $this->capturesContent()) {
@@ -401,6 +453,87 @@ final class LaravelAiEventMapper
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $messages
+     * @return list<array<string, mixed>>
+     */
+    private function withInstructionMessage(array $messages, mixed $instructions): array
+    {
+        $content = $this->stringValue($instructions);
+
+        if ($content === null) {
+            return $messages;
+        }
+
+        foreach ($messages as $message) {
+            if (($message['role'] ?? null) === 'system') {
+                return $messages;
+            }
+        }
+
+        array_unshift($messages, [
+            'role' => 'system',
+            'content' => $content,
+        ]);
+
+        return $messages;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $messages
+     * @return array<string, mixed>
+     */
+    private function messageAttributes(string $prefix, array $messages): array
+    {
+        $attributes = [];
+
+        foreach ($messages as $messageIndex => $message) {
+            $base = "{$prefix}.{$messageIndex}.message";
+
+            foreach (['role', 'content', 'name', 'tool_call_id'] as $key) {
+                $value = $this->stringValue($message[$key] ?? null);
+
+                if ($value !== null) {
+                    $attributes["{$base}.{$key}"] = $value;
+                }
+            }
+
+            foreach ($this->list($message['tool_calls'] ?? null) as $toolCallIndex => $toolCall) {
+                $toolCallBase = "{$base}.tool_calls.{$toolCallIndex}.tool_call";
+                $toolCallId = $this->stringValue(
+                    $this->value($toolCall, ['id', 'toolCallId', 'tool_call_id'])
+                        ?? (is_array($toolCall) ? ($toolCall['id'] ?? $toolCall['toolCallId'] ?? $toolCall['tool_call_id'] ?? null) : null)
+                );
+                $function = $this->value($toolCall, ['function'])
+                    ?? (is_array($toolCall) ? ($toolCall['function'] ?? null) : null);
+                $functionName = $this->stringValue(
+                    $this->value($function, ['name'])
+                        ?? $this->value($toolCall, ['name'])
+                        ?? (is_array($function) ? ($function['name'] ?? null) : null)
+                        ?? (is_array($toolCall) ? ($toolCall['name'] ?? null) : null)
+                );
+                $arguments = $this->value($function, ['arguments'])
+                    ?? $this->value($toolCall, ['arguments'])
+                    ?? (is_array($function) ? ($function['arguments'] ?? null) : null)
+                    ?? (is_array($toolCall) ? ($toolCall['arguments'] ?? null) : null);
+
+                if ($toolCallId !== null) {
+                    $attributes["{$toolCallBase}.id"] = $toolCallId;
+                }
+
+                if ($functionName !== null) {
+                    $attributes["{$toolCallBase}.function.name"] = $functionName;
+                }
+
+                if ($arguments !== null) {
+                    $attributes["{$toolCallBase}.function.arguments"] = $this->jsonAttribute($arguments);
+                }
+            }
+        }
+
+        return $attributes;
     }
 
     /**
@@ -440,6 +573,33 @@ final class LaravelAiEventMapper
         return $this->stringValue($provider)
             ?? $this->stringValue($this->value($provider, ['name', 'value']))
             ?? (is_object($provider) ? class_basename($provider) : null);
+    }
+
+    private function llmSystem(?string $provider): string
+    {
+        if ($provider === null || trim($provider) === '') {
+            return 'unknown';
+        }
+
+        return strtolower(trim($provider));
+    }
+
+    private function tokenTotal(mixed $promptTokens, mixed $completionTokens): ?int
+    {
+        if (! is_numeric($promptTokens) || ! is_numeric($completionTokens)) {
+            return null;
+        }
+
+        return (int) $promptTokens + (int) $completionTokens;
+    }
+
+    private function jsonAttribute(mixed $value): string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        return json_encode($this->serializable($value), JSON_THROW_ON_ERROR);
     }
 
     /**

@@ -13,4 +13,12 @@ enum SpanKind: string
     case Embedding = 'embedding';
     case Retriever = 'retriever';
     case Reranker = 'reranker';
+    case Guardrail = 'guardrail';
+    case Evaluator = 'evaluator';
+    case Prompt = 'prompt';
+
+    public function openInferenceValue(): string
+    {
+        return strtoupper($this->value);
+    }
 }

@@ -53,7 +53,7 @@ it('serializes a trace with openinference span attributes', function (): void {
         ->and($serialized['spans'][0]['ended_at'])->toBe('2026-05-28T10:00:01.000000Z')
         ->and($serialized['spans'][0]['duration_ms'])->toBe(1000.0)
         ->and($serialized['spans'][0]['attributes'])->toMatchArray([
-            'openinference.span.kind' => 'agent',
+            'openinference.span.kind' => 'AGENT',
             'tracefast.ai.invocation_id' => 'invocation-123',
         ])
         ->and($serialized['spans'][0]['input'])->toBe(['prompt' => 'Hello'])

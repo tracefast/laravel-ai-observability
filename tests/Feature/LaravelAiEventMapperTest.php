@@ -49,14 +49,15 @@ it('maps prompting events into agent and llm span fields', function (): void {
         'name' => 'Screening Agent',
         'input' => 'Summarize this candidate.',
         'attributes' => [
-            'openinference.span.kind' => 'agent',
+            'openinference.span.kind' => 'AGENT',
             'tracefast.ai.invocation_id' => 'invocation-123',
         ],
         'llm_span' => [
             'name' => 'chat gpt-4.1-mini',
             'input' => 'Summarize this candidate.',
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'openai',
                 'tracefast.ai.invocation_id' => 'invocation-123',
                 'llm.provider' => 'openai',
                 'llm.model_name' => 'gpt-4.1-mini',
@@ -65,6 +66,11 @@ it('maps prompting events into agent and llm span fields', function (): void {
                 'gen_ai.provider.name' => 'openai',
                 'gen_ai.request.model' => 'gpt-4.1-mini',
                 'gen_ai.prompt' => 'Summarize this candidate.',
+                'gen_ai.prompt_json' => json_encode([
+                    ['role' => 'user', 'content' => 'Summarize this candidate.'],
+                ], JSON_THROW_ON_ERROR),
+                'llm.input_messages.0.message.role' => 'user',
+                'llm.input_messages.0.message.content' => 'Summarize this candidate.',
             ],
         ],
     ]);
@@ -83,11 +89,13 @@ it('maps prompted events with root response metadata and llm usage fields', func
         'llm_span' => [
             'output' => 'The candidate is a strong fit.',
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'openai',
                 'llm.provider' => 'openai',
                 'llm.model_name' => 'gpt-4.1-mini',
                 'llm.token_count.prompt' => 17,
                 'llm.token_count.completion' => 8,
+                'llm.token_count.total' => 25,
                 'gen_ai.system' => 'openai',
                 'gen_ai.provider.name' => 'openai',
                 'gen_ai.response.model' => 'gpt-4.1-mini',
@@ -96,8 +104,33 @@ it('maps prompted events with root response metadata and llm usage fields', func
                 'gen_ai.usage.output_tokens' => 8,
                 'tracefast.ai.conversation_id' => 'conversation-456',
                 'tracefast.ai.response_type' => 'text',
+                'llm.output_messages.0.message.role' => 'assistant',
+                'llm.output_messages.0.message.content' => 'The candidate is a strong fit.',
             ],
         ],
+    ]);
+});
+
+it('maps OpenInference LLM messages and tool call attributes with flattened keys', function (): void {
+    $mapper = new LaravelAiEventMapper;
+    $promptingPayload = $mapper->prompting(new FakePromptingEvent);
+    $promptedPayload = $mapper->prompted(new FakePromptedEvent);
+    $toolPayload = $mapper->invokingTool(new FakeInvokingToolEvent);
+
+    expect($promptingPayload['llm_span']['attributes'])->toMatchArray([
+        'openinference.span.kind' => 'LLM',
+        'llm.system' => 'openai',
+        'llm.input_messages.0.message.role' => 'user',
+        'llm.input_messages.0.message.content' => 'Summarize this candidate.',
+    ])->and($promptedPayload['llm_span']['attributes'])->toMatchArray([
+        'openinference.span.kind' => 'LLM',
+        'llm.output_messages.0.message.role' => 'assistant',
+        'llm.output_messages.0.message.content' => 'The candidate is a strong fit.',
+        'llm.token_count.total' => 25,
+    ])->and($toolPayload['attributes'])->toMatchArray([
+        'openinference.span.kind' => 'TOOL',
+        'tool.id' => 'tool-call-789',
+        'tool.name' => 'lookup_candidate',
     ]);
 });
 
@@ -164,8 +197,9 @@ it('maps tool invocation arguments and results', function (): void {
         'name' => 'lookup_candidate',
         'input' => ['candidate_id' => 42],
         'attributes' => [
-            'openinference.span.kind' => 'tool',
+            'openinference.span.kind' => 'TOOL',
             'tool.name' => 'lookup_candidate',
+            'tool.id' => 'tool-call-789',
             'tool.call.id' => 'tool-call-789',
         ],
     ])->and($mapper->toolInvoked(new FakeToolInvokedEvent))->toMatchArray([
@@ -205,13 +239,14 @@ it('maps null-like events without crashing', function (): void {
         'name' => 'stdClass',
         'input' => null,
         'attributes' => [
-            'openinference.span.kind' => 'agent',
+            'openinference.span.kind' => 'AGENT',
         ],
         'llm_span' => [
             'name' => 'chat',
             'input' => null,
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'unknown',
             ],
         ],
     ])->and($mapper->prompted($event))->toMatchArray([
@@ -221,7 +256,8 @@ it('maps null-like events without crashing', function (): void {
         'llm_span' => [
             'output' => null,
             'attributes' => [
-                'openinference.span.kind' => 'llm',
+                'openinference.span.kind' => 'LLM',
+                'llm.system' => 'unknown',
             ],
         ],
     ])->and($mapper->invokingTool($event))->toMatchArray([
