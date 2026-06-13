@@ -1,3 +1,7 @@
+<p align="center">
+    <img src="art/laravel-ai-observability-tracefast.jpg" alt="Laravel AI Observability for TraceFast" width="100%">
+</p>
+
 # Laravel AI Observability
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/tracefast/laravel-ai-observability.svg?style=flat-square)](https://packagist.org/packages/tracefast/laravel-ai-observability)
@@ -63,7 +67,7 @@ Install the package via Composer:
 composer require tracefast/laravel-ai-observability
 ```
 
-That's it — observability is enabled by default and writes traces to your Laravel log.
+That's it — Observability is enabled by default and writes traces to your Laravel log.
 
 To customize exporters or other settings, publish the config file:
 
