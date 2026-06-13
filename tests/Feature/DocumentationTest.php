@@ -11,6 +11,9 @@ it('documents the simplified exporter configuration', function (): void {
         ->and($readme)->toContain('AI_OBSERVABILITY_EXPORTER=tracefast')
         ->and($readme)->toContain('TRACEFAST_API_KEY=<tracefast-project-api-key>')
         ->and($readme)->toContain('TRACEFAST_OTEL_ENDPOINT=https://collector.tracefast.dev/v1/traces')
+        ->and($readme)->toContain('AI_OBSERVABILITY_PLATFORM=laravel-ai')
+        ->and($readme)->toContain('tracefast.platform')
+        ->and($readme)->toContain('service.name')
         ->and($readme)->toContain('PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006/v1/traces')
         ->and($readme)->toContain('LANGFUSE_OTEL_ENDPOINT=https://cloud.langfuse.com/api/public/otel/v1/traces')
         ->and($readme)->toContain('LANGFUSE_OTEL_AUTHORIZATION="Basic <base64-public-key-colon-secret-key>"')
@@ -29,5 +32,7 @@ it('documents the simplified exporter configuration', function (): void {
         ->and($readme)->toContain('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://collector.example.com/v1/traces')
         ->and($readme)->toContain('openinference.schema.version')
         ->and($readme)->toContain('tracefast.ai.sdk.version')
-        ->and($readme)->toContain('AiObservability::withSession(');
+        ->and($readme)->toContain('AiObservability::withSession(')
+        ->and($readme)->toContain('AiObservability::withAttributes(')
+        ->and($readme)->toContain('workflow.name');
 });

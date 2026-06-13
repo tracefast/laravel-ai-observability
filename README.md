@@ -72,6 +72,23 @@ Override it only when TraceFast gives you a custom collector URL:
 TRACEFAST_OTEL_ENDPOINT=https://collector.tracefast.dev/v1/traces
 ```
 
+TraceFast uses `tracefast.platform` as the integration or runtime family, not
+as the name of your application. This package sends `laravel-ai` by default, so
+TraceFast can group these traces separately from `livekit`, `pipecat`, generic
+OpenInference, and other sources. The Laravel application name remains in
+`service.name`, which defaults to `config('app.name')`.
+
+```env
+# Optional. Keep this as laravel-ai unless you intentionally publish a separate
+# integration family.
+AI_OBSERVABILITY_PLATFORM=laravel-ai
+```
+
+For example, a chatbot running inside a Laravel app named `Acme Support` should
+keep `tracefast.platform=laravel-ai` and use `service.name=Acme Support`. Don't
+put the chatbot, tenant, or product name in `AI_OBSERVABILITY_PLATFORM`; add
+that context with scoped attributes instead.
+
 ### Phoenix
 
 ```env
@@ -131,10 +148,33 @@ $response = AiObservability::withSession(
     sessionId: $conversation->uuid,
     callback: fn () => $agent->prompt($message),
     userId: $user->id,
+    attributes: [
+        'tenant.id' => (string) $tenant->id,
+        'workflow.name' => 'support-triage',
+    ],
 );
 ```
 
 Each turn remains its own trace, and every turn carries the same `session.id`.
+Scoped attributes are copied onto the agent, LLM, and tool spans created while
+the callback runs. Use them for app-specific business context such as tenant
+ids, workflow names, plan names, feature flags, experiment ids, or the
+conversation id your product already uses.
+
+Use `AiObservability::withAttributes()` when you don't need `session.id` or
+`user.id` helpers:
+
+```php
+$response = AiObservability::withAttributes([
+    'tenant.id' => (string) $tenant->id,
+    'workflow.name' => 'support-triage',
+], fn () => $agent->prompt($message));
+```
+
+Keep scoped attributes separate from resource identity. `tracefast.platform`
+identifies the integration family, `service.name` identifies the Laravel app or
+service, and custom attributes identify the business context for a specific
+trace or span.
 
 ## Database Exporter
 
