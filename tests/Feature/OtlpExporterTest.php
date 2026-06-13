@@ -241,6 +241,10 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
                 'value' => ['stringValue' => 'tracefast.laravel-ai-observability'],
             ])
             ->and($payload['resourceSpans'][0]['resource']['attributes'])->toContain([
+                'key' => 'tracefast.platform',
+                'value' => ['stringValue' => 'laravel-ai'],
+            ])
+            ->and($payload['resourceSpans'][0]['resource']['attributes'])->toContain([
                 'key' => 'openinference.schema.version',
                 'value' => ['stringValue' => '1.0.0'],
             ])
@@ -294,6 +298,27 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
                 'key' => 'output.mime_type',
                 'value' => ['stringValue' => 'application/json'],
             ]);
+
+        return true;
+    });
+});
+
+it('allows the tracefast platform resource attribute to be overridden', function (): void {
+    config()->set('ai-observability.platform', 'custom-laravel-agent');
+
+    Http::fake([
+        'https://example.test/otel/v1/traces' => Http::response([], 200),
+    ]);
+
+    (new OtlpExporter([
+        'endpoint' => 'https://example.test/otel',
+    ]))->export(otlpTrace());
+
+    Http::assertSent(function ($request): bool {
+        expect($request->data()['resourceSpans'][0]['resource']['attributes'])->toContain([
+            'key' => 'tracefast.platform',
+            'value' => ['stringValue' => 'custom-laravel-agent'],
+        ]);
 
         return true;
     });

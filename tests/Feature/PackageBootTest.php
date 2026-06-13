@@ -26,6 +26,7 @@ final class PackageBootCapturingExporter implements Exporter
 it('registers the package config and root service', function (): void {
     expect(config('ai-observability.enabled'))->toBeTrue()
         ->and(config('ai-observability.default'))->toBe('log')
+        ->and(config('ai-observability.platform'))->toBe('laravel-ai')
         ->and(config('ai-observability.capture.content'))->toBe('full')
         ->and(config('ai-observability.export.mode'))->toBe('defer')
         ->and(config('ai-observability.export.connection'))->toBeNull()

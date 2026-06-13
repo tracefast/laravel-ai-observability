@@ -138,6 +138,10 @@ final class OtlpExporter implements Exporter
                 'value' => ['stringValue' => (string) config('app.name', 'Laravel')],
             ],
             [
+                'key' => 'tracefast.platform',
+                'value' => ['stringValue' => $this->tracefastPlatform()],
+            ],
+            [
                 'key' => 'telemetry.sdk.name',
                 'value' => ['stringValue' => 'tracefast.laravel-ai-observability'],
             ],
@@ -154,6 +158,17 @@ final class OtlpExporter implements Exporter
                 'value' => ['stringValue' => PackageInfo::OpenInferenceSchemaVersion],
             ],
         ];
+    }
+
+    private function tracefastPlatform(): string
+    {
+        $platform = config('ai-observability.platform', 'laravel-ai');
+
+        if (is_string($platform) && trim($platform) !== '') {
+            return trim($platform);
+        }
+
+        return 'laravel-ai';
     }
 
     /**

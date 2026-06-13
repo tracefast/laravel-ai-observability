@@ -5,6 +5,8 @@ return [
 
     'default' => env('AI_OBSERVABILITY_EXPORTER', 'log'),
 
+    'platform' => env('AI_OBSERVABILITY_PLATFORM', 'laravel-ai'),
+
     'capture' => [
         'content' => env('AI_OBSERVABILITY_CAPTURE_CONTENT', 'full'),
     ],

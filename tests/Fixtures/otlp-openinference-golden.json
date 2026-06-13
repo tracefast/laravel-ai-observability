@@ -10,6 +10,12 @@
             }
           },
           {
+            "key": "tracefast.platform",
+            "value": {
+              "stringValue": "laravel-ai"
+            }
+          },
+          {
             "key": "telemetry.sdk.name",
             "value": {
               "stringValue": "tracefast.laravel-ai-observability"
