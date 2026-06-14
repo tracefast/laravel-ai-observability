@@ -25,6 +25,9 @@ final class FakeUsage
     public function __construct(
         public int $promptTokens,
         public int $completionTokens,
+        public int $cacheReadInputTokens = 0,
+        public int $cacheWriteInputTokens = 0,
+        public int $reasoningTokens = 0,
     ) {}
 }
 

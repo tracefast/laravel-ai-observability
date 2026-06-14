@@ -163,8 +163,6 @@ it('exports an agent lifecycle trace with a child llm span and forgets registry 
         ->and($trace['spans'][0]['attributes'])->not->toHaveKeys([
             'llm.token_count.prompt',
             'llm.token_count.completion',
-            'gen_ai.usage.input_tokens',
-            'gen_ai.usage.output_tokens',
         ])
         ->and($trace['spans'][1])->toMatchArray([
             'name' => 'chat gpt-4.1-mini',
@@ -182,8 +180,6 @@ it('exports an agent lifecycle trace with a child llm span and forgets registry 
             'llm.token_count.prompt' => 17,
             'llm.token_count.completion' => 8,
             'llm.token_count.total' => 25,
-            'gen_ai.usage.input_tokens' => 17,
-            'gen_ai.usage.output_tokens' => 8,
             'llm.input_messages.0.message.role' => 'user',
             'llm.input_messages.0.message.content' => 'Summarize this candidate.',
             'llm.output_messages.0.message.role' => 'assistant',

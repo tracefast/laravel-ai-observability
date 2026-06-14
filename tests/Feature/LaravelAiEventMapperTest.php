@@ -61,18 +61,20 @@ it('maps prompting events into agent and llm span fields', function (): void {
                 'tracefast.ai.invocation_id' => 'invocation-123',
                 'llm.provider' => 'openai',
                 'llm.model_name' => 'gpt-4.1-mini',
-                'gen_ai.operation.name' => 'chat',
-                'gen_ai.system' => 'openai',
-                'gen_ai.provider.name' => 'openai',
-                'gen_ai.request.model' => 'gpt-4.1-mini',
-                'gen_ai.prompt' => 'Summarize this candidate.',
-                'gen_ai.prompt_json' => json_encode([
-                    ['role' => 'user', 'content' => 'Summarize this candidate.'],
-                ], JSON_THROW_ON_ERROR),
                 'llm.input_messages.0.message.role' => 'user',
                 'llm.input_messages.0.message.content' => 'Summarize this candidate.',
             ],
         ],
+    ]);
+
+    expect($payload['llm_span']['attributes'])->not->toHaveKeys([
+        'gen_ai.operation.name',
+        'gen_ai.system',
+        'gen_ai.provider.name',
+        'gen_ai.request.model',
+        'gen_ai.input.messages',
+        'gen_ai.prompt',
+        'gen_ai.prompt_json',
     ]);
 });
 
@@ -96,18 +98,22 @@ it('maps prompted events with root response metadata and llm usage fields', func
                 'llm.token_count.prompt' => 17,
                 'llm.token_count.completion' => 8,
                 'llm.token_count.total' => 25,
-                'gen_ai.system' => 'openai',
-                'gen_ai.provider.name' => 'openai',
-                'gen_ai.response.model' => 'gpt-4.1-mini',
-                'gen_ai.completion' => 'The candidate is a strong fit.',
-                'gen_ai.usage.input_tokens' => 17,
-                'gen_ai.usage.output_tokens' => 8,
                 'tracefast.ai.conversation_id' => 'conversation-456',
                 'tracefast.ai.response_type' => 'text',
                 'llm.output_messages.0.message.role' => 'assistant',
                 'llm.output_messages.0.message.content' => 'The candidate is a strong fit.',
             ],
         ],
+    ]);
+
+    expect($payload['llm_span']['attributes'])->not->toHaveKeys([
+        'gen_ai.system',
+        'gen_ai.provider.name',
+        'gen_ai.response.model',
+        'gen_ai.usage.input_tokens',
+        'gen_ai.usage.output_tokens',
+        'gen_ai.output.messages',
+        'gen_ai.completion',
     ]);
 });
 
@@ -141,13 +147,9 @@ it('does not attach llm usage fields to root agent mapper attributes', function 
     expect($promptingPayload['attributes'])->not->toHaveKeys([
         'llm.provider',
         'llm.model_name',
-        'gen_ai.operation.name',
-        'gen_ai.request.model',
     ])->and($promptedPayload['attributes'])->not->toHaveKeys([
         'llm.token_count.prompt',
         'llm.token_count.completion',
-        'gen_ai.usage.input_tokens',
-        'gen_ai.usage.output_tokens',
     ]);
 });
 
@@ -269,6 +271,73 @@ it('maps null-like events without crashing', function (): void {
         'invocation_id' => null,
         'tool_invocation_id' => null,
         'output' => null,
+    ]);
+});
+
+it('maps cache and reasoning token counts to openinference prompt detail attributes', function (): void {
+    $event = new class
+    {
+        public string $invocationId = 'invocation-cache';
+
+        public string $conversationId = 'conversation-cache';
+
+        public object $agent;
+
+        public function __construct()
+        {
+            $this->agent = new class
+            {
+                public string $name = 'CacheAgent';
+
+                public string $provider = 'anthropic';
+
+                public string $model = 'claude-4-sonnet';
+            };
+        }
+
+        public function response(): object
+        {
+            return new class
+            {
+                public string $output = 'Cached response.';
+
+                public string $type = 'text';
+
+                public object $usage;
+
+                public function __construct()
+                {
+                    $this->usage = new \Tracefast\LaravelAiObservability\Tests\Fixtures\FakeUsage(
+                        promptTokens: 100,
+                        completionTokens: 20,
+                        cacheReadInputTokens: 80,
+                        cacheWriteInputTokens: 15,
+                        reasoningTokens: 5,
+                    );
+                }
+            };
+        }
+    };
+
+    $payload = (new LaravelAiEventMapper)->prompted($event);
+
+    expect($payload['llm_span']['attributes'])->toMatchArray([
+        'llm.token_count.prompt' => 100,
+        'llm.token_count.completion' => 20,
+        'llm.token_count.total' => 120,
+        'llm.token_count.prompt_details.cache_read' => 80,
+        'llm.token_count.prompt_details.cache_write' => 15,
+        'llm.token_count.completion_details.reasoning' => 5,
+    ]);
+});
+
+it('omits cache and reasoning token attributes when zero', function (): void {
+    $payload = (new LaravelAiEventMapper)->prompted(new FakePromptedEvent);
+
+    expect($payload['llm_span']['attributes'])->not->toHaveKeys([
+        'llm.token_count.prompt_details.cache_read',
+        'llm.token_count.prompt_details.cache_write',
+        'llm.token_count.completion_details.reasoning',
     ]);
 });
 

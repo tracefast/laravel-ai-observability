@@ -40,21 +40,22 @@ it('captures prompt text and messages in full content mode', function (): void {
                 'tracefast.ai.invocation_id' => 'invocation-rich',
                 'llm.provider' => 'anthropic',
                 'llm.model_name' => 'claude-4-sonnet',
-                'gen_ai.operation.name' => 'chat',
-                'gen_ai.system' => 'anthropic',
-                'gen_ai.provider.name' => 'anthropic',
-                'gen_ai.request.model' => 'claude-4-sonnet',
-                'gen_ai.prompt' => 'Summarize the latest interview notes.',
-                'gen_ai.prompt_json' => json_encode([
-                    ['role' => 'system', 'content' => 'Be concise.'],
-                    ['role' => 'user', 'content' => 'Summarize the latest interview notes.'],
-                ], JSON_THROW_ON_ERROR),
                 'llm.input_messages.0.message.role' => 'system',
                 'llm.input_messages.0.message.content' => 'Be concise.',
                 'llm.input_messages.1.message.role' => 'user',
                 'llm.input_messages.1.message.content' => 'Summarize the latest interview notes.',
             ],
         ],
+    ]);
+
+    expect($payload['llm_span']['attributes'])->not->toHaveKeys([
+        'gen_ai.operation.name',
+        'gen_ai.system',
+        'gen_ai.provider.name',
+        'gen_ai.request.model',
+        'gen_ai.input.messages',
+        'gen_ai.prompt',
+        'gen_ai.prompt_json',
     ]);
 });
 
@@ -95,24 +96,20 @@ it('captures real laravel ai prompt instructions conversation messages and attac
     ]);
 });
 
-it('normalizes laravel ai message objects into genai prompt json', function (): void {
+it('normalizes laravel ai message objects into openinference messages', function (): void {
     config()->set('ai-observability.capture.content', 'full');
 
     $payload = (new LaravelAiEventMapper)->prompting(new ObjectMessagePromptingEvent);
-    $messages = json_decode($payload['llm_span']['attributes']['gen_ai.prompt_json'], true, flags: JSON_THROW_ON_ERROR);
+    $attributes = $payload['llm_span']['attributes'];
 
-    expect($messages)->toBe([
-        ['role' => 'system', 'content' => 'Be direct.'],
-        ['role' => 'assistant', 'content' => 'Previous summary is available.'],
-        ['role' => 'user', 'content' => 'Summarize the uploaded resume.'],
-    ])->and($payload['llm_span']['attributes'])->toMatchArray([
+    expect($attributes)->toMatchArray([
         'llm.input_messages.0.message.role' => 'system',
         'llm.input_messages.0.message.content' => 'Be direct.',
         'llm.input_messages.1.message.role' => 'assistant',
         'llm.input_messages.1.message.content' => 'Previous summary is available.',
         'llm.input_messages.2.message.role' => 'user',
         'llm.input_messages.2.message.content' => 'Summarize the uploaded resume.',
-    ]);
+    ])->not->toHaveKey('gen_ai.input.messages');
 });
 
 it('captures response value tool calls tool results and steps in full content mode', function (): void {
@@ -181,12 +178,6 @@ it('captures response value tool calls tool results and steps in full content mo
                 'llm.token_count.prompt' => 31,
                 'llm.token_count.completion' => 12,
                 'llm.token_count.total' => 43,
-                'gen_ai.system' => 'anthropic',
-                'gen_ai.provider.name' => 'anthropic',
-                'gen_ai.response.model' => 'claude-4-sonnet',
-                'gen_ai.completion' => 'Ada is a strong match.',
-                'gen_ai.usage.input_tokens' => 31,
-                'gen_ai.usage.output_tokens' => 12,
                 'tracefast.ai.conversation_id' => 'conversation-rich',
                 'tracefast.ai.response_type' => 'text',
                 'llm.output_messages.0.message.role' => 'assistant',
@@ -196,6 +187,16 @@ it('captures response value tool calls tool results and steps in full content mo
                 'llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments' => '{"candidate_id":42}',
             ],
         ],
+    ]);
+
+    expect($payload['llm_span']['attributes'])->not->toHaveKeys([
+        'gen_ai.system',
+        'gen_ai.provider.name',
+        'gen_ai.response.model',
+        'gen_ai.usage.input_tokens',
+        'gen_ai.usage.output_tokens',
+        'gen_ai.output.messages',
+        'gen_ai.completion',
     ]);
 });
 
@@ -250,10 +251,6 @@ it('omits content payloads in off mode while preserving metadata', function (): 
                 'tracefast.ai.invocation_id' => 'invocation-rich',
                 'llm.provider' => 'anthropic',
                 'llm.model_name' => 'claude-4-sonnet',
-                'gen_ai.operation.name' => 'chat',
-                'gen_ai.system' => 'anthropic',
-                'gen_ai.provider.name' => 'anthropic',
-                'gen_ai.request.model' => 'claude-4-sonnet',
             ],
         ],
     ])->and($mapper->prompted(new RichPromptedEvent))->toMatchArray([
@@ -273,11 +270,6 @@ it('omits content payloads in off mode while preserving metadata', function (): 
                 'llm.token_count.prompt' => 31,
                 'llm.token_count.completion' => 12,
                 'llm.token_count.total' => 43,
-                'gen_ai.system' => 'anthropic',
-                'gen_ai.provider.name' => 'anthropic',
-                'gen_ai.response.model' => 'claude-4-sonnet',
-                'gen_ai.usage.input_tokens' => 31,
-                'gen_ai.usage.output_tokens' => 12,
                 'tracefast.ai.conversation_id' => 'conversation-rich',
                 'tracefast.ai.response_type' => 'text',
             ],

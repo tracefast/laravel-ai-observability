@@ -53,8 +53,6 @@ final class LaravelAiEventMapper
                 ?? $this->value($agent, ['model', 'modelName', 'model_name'])
         );
         $inputMessages = $this->normalizedPromptMessages($prompt, $agent, $eventInput);
-        $promptText = $this->promptText($prompt, $eventInput);
-        $promptMessages = $this->messagesJson($inputMessages);
         $input = $this->promptInput($prompt, $eventInput);
 
         return [
@@ -74,12 +72,6 @@ final class LaravelAiEventMapper
                     'tracefast.ai.invocation_id' => $invocationId,
                     'llm.provider' => $provider,
                     'llm.model_name' => $model,
-                    'gen_ai.operation.name' => $invocationId !== null ? 'chat' : null,
-                    'gen_ai.system' => $provider,
-                    'gen_ai.provider.name' => $provider,
-                    'gen_ai.request.model' => $model,
-                    'gen_ai.prompt' => $promptText,
-                    'gen_ai.prompt_json' => $promptMessages,
                 ], $this->messageAttributes('llm.input_messages', $inputMessages))),
             ],
         ];
@@ -116,6 +108,9 @@ final class LaravelAiEventMapper
         );
         $promptTokens = $this->value($usage, ['promptTokens', 'prompt_tokens', 'inputTokens', 'input_tokens']);
         $completionTokens = $this->value($usage, ['completionTokens', 'completion_tokens', 'outputTokens', 'output_tokens']);
+        $cacheReadTokens = $this->positiveInt($this->value($usage, ['cacheReadInputTokens', 'cache_read_input_tokens']));
+        $cacheWriteTokens = $this->positiveInt($this->value($usage, ['cacheWriteInputTokens', 'cache_write_input_tokens']));
+        $reasoningTokens = $this->positiveInt($this->value($usage, ['reasoningTokens', 'reasoning_tokens']));
         $totalTokens = $this->tokenTotal($promptTokens, $completionTokens);
         $responseType = $this->stringValue($this->value($event, ['responseType', 'response_type', 'type']) ?? $this->value($response, ['responseType', 'response_type', 'type']))
             ?? (is_object($response) ? class_basename($response) : null);
@@ -148,12 +143,9 @@ final class LaravelAiEventMapper
                     'llm.token_count.prompt' => $promptTokens,
                     'llm.token_count.completion' => $completionTokens,
                     'llm.token_count.total' => $totalTokens,
-                    'gen_ai.system' => $provider,
-                    'gen_ai.provider.name' => $provider,
-                    'gen_ai.response.model' => $model,
-                    'gen_ai.completion' => $completion,
-                    'gen_ai.usage.input_tokens' => $promptTokens,
-                    'gen_ai.usage.output_tokens' => $completionTokens,
+                    'llm.token_count.prompt_details.cache_read' => $cacheReadTokens,
+                    'llm.token_count.prompt_details.cache_write' => $cacheWriteTokens,
+                    'llm.token_count.completion_details.reasoning' => $reasoningTokens,
                     'tracefast.ai.conversation_id' => $conversationId,
                     'tracefast.ai.response_type' => $responseType,
                 ], $this->messageAttributes('llm.output_messages', $outputMessages))),
@@ -312,18 +304,6 @@ final class LaravelAiEventMapper
         return $messages === [] ? null : $messages;
     }
 
-    private function promptText(mixed $prompt, mixed $fallback): ?string
-    {
-        if (! $this->capturesContent()) {
-            return null;
-        }
-
-        return $this->stringValue(
-            $this->value($prompt, ['input', 'prompt', 'text', 'content', 'message'])
-                ?? $fallback
-        );
-    }
-
     private function responseOutput(mixed $response, mixed $fallback): mixed
     {
         if (! $this->capturesContent()) {
@@ -408,18 +388,6 @@ final class LaravelAiEventMapper
         ];
 
         return Arr::withoutNulls($message) === ['role' => 'assistant'] ? [] : [Arr::withoutNulls($message)];
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $messages
-     */
-    private function messagesJson(array $messages): ?string
-    {
-        if ($messages === []) {
-            return null;
-        }
-
-        return json_encode($messages, JSON_THROW_ON_ERROR);
     }
 
     private function captured(mixed $value): mixed
@@ -591,6 +559,15 @@ final class LaravelAiEventMapper
         }
 
         return (int) $promptTokens + (int) $completionTokens;
+    }
+
+    private function positiveInt(mixed $value): ?int
+    {
+        if (! is_numeric($value) || (int) $value <= 0) {
+            return null;
+        }
+
+        return (int) $value;
     }
 
     private function jsonAttribute(mixed $value): string

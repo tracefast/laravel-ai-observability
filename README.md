@@ -9,7 +9,7 @@
 [![PHP Version](https://img.shields.io/packagist/php-v/tracefast/laravel-ai-observability.svg?style=flat-square)](https://packagist.org/packages/tracefast/laravel-ai-observability)
 [![License](https://img.shields.io/packagist/l/tracefast/laravel-ai-observability.svg?style=flat-square)](LICENSE.md)
 
-**OpenInference-compatible tracing for the [Laravel AI SDK](https://github.com/laravel/ai).**
+**OpenInference-compatible AI tracing over OpenTelemetry/OTLP for Laravel AI SDK applications.**
 
 This package listens to `laravel/ai` events and exports agent runs, model calls, tool calls, inputs, outputs, token usage, and errors — to your application logs, [TraceFast](https://tracefast.dev), Phoenix, Langfuse, Braintrust, any OTLP-compatible collector, or your local database.
 
@@ -46,7 +46,7 @@ It's designed to be safe to drop into a project on day one. Out of the box it wr
 ## Why this package
 
 - **Zero-config by default** — install and start capturing traces immediately; no collector, API key, or extra setup required.
-- **OpenInference-compatible** — traces follow the OpenInference schema and `gen_ai.*` semantic conventions, so they work with the broader LLM observability ecosystem.
+- **OpenInference-compatible over OTLP** — traces use OpenTelemetry/OTLP transport with OpenInference AI span attributes and message conventions.
 - **Production-safe export modes** — defer, queue, or background exports so trace delivery never sits in the critical request path.
 - **Pluggable exporters** — ship traces to one or more destinations (TraceFast, Phoenix, Langfuse, Braintrust, generic OTLP, your database, or a custom driver) without changing application code.
 - **Built-in resilience** — payload limits, bounded retries, gzip compression, and a circuit breaker protect your app if a collector is slow or unreachable.
@@ -181,7 +181,7 @@ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://collector.example.com/v1/traces
 OTEL_EXPORTER_OTLP_TRACES_HEADERS="Authorization=Bearer <token>"
 ```
 
-OTLP payloads include OpenInference and versioned TraceFast metadata, such as `openinference.schema.version`, `tracefast.ai.sdk.version`, `tracefast.ai.package.version`, and `gen_ai.*` attributes where the Laravel AI SDK exposes the source data.
+OTLP payloads include OpenInference and versioned TraceFast metadata, such as `openinference.schema.version`, `tracefast.ai.sdk.version`, `tracefast.ai.package.version`, and OpenInference message attributes such as `llm.input_messages.*` and `llm.output_messages.*` where the Laravel AI SDK exposes the source data.
 
 ### Database Exporter
 
@@ -213,6 +213,8 @@ To disable content capture:
 ```env
 AI_OBSERVABILITY_CAPTURE_CONTENT=off
 ```
+
+The package uses OpenInference semantic conventions exclusively and does not emit OTel GenAI semantic convention attributes (`gen_ai.*`). LLM messages, model metadata, and token usage are represented once using OpenInference attributes such as `llm.input_messages.*`, `llm.output_messages.*`, `llm.model_name`, `llm.provider`, and `llm.token_count.*`.
 
 ## Conversation Correlation
 
