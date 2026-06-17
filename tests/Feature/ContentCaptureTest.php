@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
 use Tracefast\LaravelAiObservability\LaravelAi\LaravelAiEventMapper;
+use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeStructuredPromptingEvent;
 
 it('captures prompt text and messages in full content mode', function (): void {
     config()->set('ai-observability.capture.content', 'full');
@@ -290,6 +291,9 @@ it('omits content payloads in off mode while preserving metadata', function (): 
         'tool_invocation_id' => 'call-1',
         'output' => null,
     ]);
+
+    expect($mapper->prompting(new FakeStructuredPromptingEvent)['llm_span']['attributes'])
+        ->not->toHaveKey('llm.tools.0.tool.json_schema');
 });
 
 final class RichProvider

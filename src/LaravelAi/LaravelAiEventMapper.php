@@ -8,9 +8,16 @@ use BackedEnum;
 use Closure;
 use DateTimeInterface;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use JsonSerializable;
+use Laravel\Ai\Contracts\HasStructuredOutput;
+use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\ObjectSchema;
+use Laravel\Ai\Tools\ToolNameResolver;
 use ReflectionMethod;
 use Stringable;
+use Throwable;
 use Tracefast\LaravelAiObservability\Context\ObservationContext;
 use Tracefast\LaravelAiObservability\Support\Arr;
 use Traversable;
@@ -19,6 +26,13 @@ use UnitEnum;
 final class LaravelAiEventMapper
 {
     private const MaxSanitizationDepth = 8;
+
+    /**
+     * The synthetic tool Laravel AI advertises to the model for structured output.
+     *
+     * Matches Laravel\Ai\Gateway\Bedrock\BedrockTextGateway::STRUCTURED_OUTPUT_TOOL.
+     */
+    private const StructuredOutputTool = 'structured_output';
 
     public function __construct(
         private readonly ?ObservationContext $context = null,
@@ -72,7 +86,7 @@ final class LaravelAiEventMapper
                     'tracefast.ai.invocation_id' => $invocationId,
                     'llm.provider' => $provider,
                     'llm.model_name' => $model,
-                ], $this->messageAttributes('llm.input_messages', $inputMessages))),
+                ], $this->messageAttributes('llm.input_messages', $inputMessages), $this->toolAttributes($agent))),
             ],
         ];
     }
@@ -502,6 +516,91 @@ final class LaravelAiEventMapper
         }
 
         return $attributes;
+    }
+
+    /**
+     * Emit the tool definitions advertised to the model as OpenInference `llm.tools.*` attributes.
+     *
+     * Covers the synthetic `structured_output` tool Laravel AI sends for `HasStructuredOutput`
+     * agents plus any real `HasTools`. These are request-side definitions, not executed tool
+     * calls; actual calls still flow through `llm.output_messages.*.tool_calls.*`.
+     *
+     * @return array<string, string>
+     */
+    private function toolAttributes(mixed $agent): array
+    {
+        if (! $this->capturesContent()) {
+            return [];
+        }
+
+        if (! is_object($agent)) {
+            return [];
+        }
+
+        $attributes = [];
+        $index = 0;
+
+        // ponytail: schema reconstruction can throw on a malformed agent schema; never let
+        // telemetry mapping break the prompt. Swallow and skip the offending tool.
+        if ($agent instanceof HasStructuredOutput) {
+            try {
+                $schema = $agent->schema(new JsonSchemaTypeFactory);
+
+                if (filled($schema)) {
+                    $attributes += $this->toolSchemaAttribute(
+                        $index++,
+                        self::StructuredOutputTool,
+                        'Return the response as a structured JSON object matching the provided schema.',
+                        (new ObjectSchema($schema))->toSchema(),
+                    );
+                }
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
+
+        if ($agent instanceof HasTools) {
+            foreach ($this->list($agent->tools()) as $tool) {
+                if (! $tool instanceof Tool) {
+                    continue;
+                }
+
+                try {
+                    $schema = $tool->schema(new JsonSchemaTypeFactory);
+
+                    $attributes += $this->toolSchemaAttribute(
+                        $index++,
+                        ToolNameResolver::resolve($tool),
+                        (string) $tool->description(),
+                        filled($schema) ? (new ObjectSchema($schema))->toSchema() : ['type' => 'object', 'properties' => []],
+                    );
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
+            }
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * Build a single OpenInference `llm.tools.<index>.tool.json_schema` attribute.
+     *
+     * @param  array<string, mixed>  $parameters
+     * @return array<string, string>
+     */
+    private function toolSchemaAttribute(int $index, string $name, string $description, array $parameters): array
+    {
+        return [
+            "llm.tools.{$index}.tool.json_schema" => $this->jsonAttribute([
+                'type' => 'function',
+                'function' => Arr::withoutNulls([
+                    'name' => $name,
+                    'description' => $description === '' ? null : $description,
+                    'parameters' => $parameters,
+                ]),
+            ]),
+        ];
     }
 
     /**

@@ -14,7 +14,10 @@ use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeNestedToolOutput;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakePromptedEvent;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakePromptedEventWithoutResponseType;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakePromptingEvent;
+use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeStructuredPromptingEvent;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeToolInvokedEvent;
+use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeToolPromptingEvent;
+use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeUsage;
 
 require_once __DIR__.'/../Fixtures/FakeEvents.php';
 
@@ -76,6 +79,45 @@ it('maps prompting events into agent and llm span fields', function (): void {
         'gen_ai.prompt',
         'gen_ai.prompt_json',
     ]);
+});
+
+it('emits the structured output schema as an llm.tools json_schema attribute', function (): void {
+    $payload = (new LaravelAiEventMapper)->prompting(new FakeStructuredPromptingEvent);
+
+    $attributes = $payload['llm_span']['attributes'];
+
+    expect($attributes)->toHaveKey('llm.tools.0.tool.json_schema');
+
+    $tool = json_decode($attributes['llm.tools.0.tool.json_schema'], true, flags: JSON_THROW_ON_ERROR);
+
+    expect($tool['type'])->toBe('function')
+        ->and($tool['function']['name'])->toBe('structured_output')
+        ->and($tool['function']['parameters']['type'])->toBe('object')
+        ->and($tool['function']['parameters']['properties'])->toHaveKeys(['score', 'summary']);
+
+    // It is a request-side definition, not an executed tool call or a TOOL span.
+    expect($attributes['openinference.span.kind'])->toBe('LLM');
+});
+
+it('emits real agent tool definitions as llm.tools json_schema attributes', function (): void {
+    $payload = (new LaravelAiEventMapper)->prompting(new FakeToolPromptingEvent);
+
+    $attributes = $payload['llm_span']['attributes'];
+
+    expect($attributes)->toHaveKey('llm.tools.0.tool.json_schema');
+
+    $tool = json_decode($attributes['llm.tools.0.tool.json_schema'], true, flags: JSON_THROW_ON_ERROR);
+
+    expect($tool['function']['name'])->toBe('lookup_weather')
+        ->and($tool['function']['description'])->toBe('Look up the weather for a city.')
+        ->and($tool['function']['parameters']['properties'])->toHaveKey('city');
+});
+
+it('does not emit llm.tools attributes for plain agents', function (): void {
+    $payload = (new LaravelAiEventMapper)->prompting(new FakePromptingEvent);
+
+    expect(array_keys($payload['llm_span']['attributes']))
+        ->not->toContain('llm.tools.0.tool.json_schema');
 });
 
 it('maps prompted events with root response metadata and llm usage fields', function (): void {
@@ -307,7 +349,7 @@ it('maps cache and reasoning token counts to openinference prompt detail attribu
 
                 public function __construct()
                 {
-                    $this->usage = new \Tracefast\LaravelAiObservability\Tests\Fixtures\FakeUsage(
+                    $this->usage = new FakeUsage(
                         promptTokens: 100,
                         completionTokens: 20,
                         cacheReadInputTokens: 80,
