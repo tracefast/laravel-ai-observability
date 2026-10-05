@@ -10,6 +10,7 @@ use Tracefast\LaravelAiObservability\Data\SpanKind;
 use Tracefast\LaravelAiObservability\Data\SpanStatus;
 use Tracefast\LaravelAiObservability\Data\Trace;
 use Tracefast\LaravelAiObservability\Exporters\DatabaseExporter;
+use Tracefast\LaravelAiObservability\Support\PackageInfo;
 
 beforeEach(function (): void {
     Schema::create('ai_observability_traces', function (Blueprint $table): void {
@@ -100,7 +101,7 @@ it('stores trace and span rows', function (): void {
             'tracefast.ai.package.name' => 'tracefast/laravel-ai-observability',
             'tracefast.ai.package.version' => 'dev-main',
             'tracefast.ai.sdk.name' => 'laravel/ai',
-            'tracefast.ai.sdk.version' => 'v0.7.2',
+            'tracefast.ai.sdk.version' => PackageInfo::laravelAiVersion(),
         ])
         ->and(json_decode($spanRow->input, true, flags: JSON_THROW_ON_ERROR))->toBeNull()
         ->and(json_decode($spanRow->output, true, flags: JSON_THROW_ON_ERROR))->toBe(['content' => 'Hello'])
@@ -116,7 +117,7 @@ it('stores trace and span rows', function (): void {
                 'tracefast.ai.package.name' => 'tracefast/laravel-ai-observability',
                 'tracefast.ai.package.version' => 'dev-main',
                 'tracefast.ai.sdk.name' => 'laravel/ai',
-                'tracefast.ai.sdk.version' => 'v0.7.2',
+                'tracefast.ai.sdk.version' => PackageInfo::laravelAiVersion(),
             ],
         ]);
 });

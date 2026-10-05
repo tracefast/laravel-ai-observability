@@ -2,6 +2,16 @@
 
 declare(strict_types=1);
 
+use Laravel\Ai\AnonymousAgent;
+use Laravel\Ai\Contracts\Providers\TextProvider;
+use Laravel\Ai\Events\AgentPrompted;
+use Laravel\Ai\Events\InvokingTool;
+use Laravel\Ai\Events\PromptingAgent;
+use Laravel\Ai\Events\ToolInvoked;
+use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Tracefast\LaravelAiObservability\Context\ObservationContext;
 use Tracefast\LaravelAiObservability\Data\Span;
 use Tracefast\LaravelAiObservability\Data\SpanKind;
@@ -9,6 +19,7 @@ use Tracefast\LaravelAiObservability\Data\Trace;
 use Tracefast\LaravelAiObservability\LaravelAi\EventClassMap;
 use Tracefast\LaravelAiObservability\LaravelAi\LaravelAiEventMapper;
 use Tracefast\LaravelAiObservability\Registry\InMemoryTraceRegistry;
+use Tracefast\LaravelAiObservability\Support\PackageInfo;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeInvokingToolEvent;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeNestedToolOutput;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakePromptedEvent;
@@ -18,6 +29,7 @@ use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeStructuredPromptingEvent
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeToolInvokedEvent;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeToolPromptingEvent;
 use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeUsage;
+use Tracefast\LaravelAiObservability\Tests\Fixtures\FakeWeatherTool;
 
 require_once __DIR__.'/../Fixtures/FakeEvents.php';
 
@@ -388,4 +400,53 @@ it('only returns event classes that exist', function (): void {
         expect($event)->toBeString()
             ->and(class_exists($event))->toBeTrue();
     }
+});
+
+it('maps real Laravel AI v1 agent and tool events', function (): void {
+    if (version_compare(ltrim(PackageInfo::laravelAiVersion(), 'v'), '1.0.0', '<')) {
+        $this->markTestSkipped('Requires Laravel AI v1.');
+    }
+
+    $agent = new AnonymousAgent('Summarize clearly.', [], []);
+    $provider = Mockery::mock(TextProvider::class);
+    $provider->shouldReceive('__toString')->andReturn('openai');
+    $prompt = new AgentPrompt($agent, 'Summarize this.', [], $provider, 'gpt-4.1-mini', invocationId: 'real-v1');
+    $response = new AgentResponse(
+        'real-v1',
+        'A concise summary.',
+        new TextUsage(inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 80, cacheWriteInputTokens: 15, reasoningTokens: 5),
+        new Meta('openai', 'gpt-4.1-mini'),
+    );
+    $mapper = new LaravelAiEventMapper;
+
+    $started = $mapper->prompting(new PromptingAgent('real-v1', $prompt));
+    $finished = $mapper->prompted(new AgentPrompted('real-v1', $prompt, $response));
+    $invokingTool = $mapper->invokingTool(new InvokingTool('real-v1', 'tool-v1', $agent, new FakeWeatherTool, ['city' => 'Delhi']));
+    $toolInvoked = $mapper->toolInvoked(new ToolInvoked('real-v1', 'tool-v1', $agent, new FakeWeatherTool, ['city' => 'Delhi'], 'sunny', 4.2));
+
+    expect($started['invocation_id'])->toBe('real-v1')
+        ->and($started['llm_span']['attributes'])->toMatchArray([
+            'llm.system' => 'openai',
+            'llm.model_name' => 'gpt-4.1-mini',
+            'llm.input_messages.0.message.role' => 'system',
+            'llm.input_messages.1.message.content' => 'Summarize this.',
+        ])
+        ->and($finished['llm_span']['attributes'])->toMatchArray([
+            'llm.token_count.prompt' => 100,
+            'llm.token_count.completion' => 20,
+            'llm.token_count.total' => 120,
+            'llm.token_count.prompt_details.cache_read' => 80,
+            'llm.token_count.prompt_details.cache_write' => 15,
+            'llm.token_count.completion_details.reasoning' => 5,
+        ])
+        ->and($invokingTool)->toMatchArray([
+            'invocation_id' => 'real-v1',
+            'tool_invocation_id' => 'tool-v1',
+            'input' => ['city' => 'Delhi'],
+        ])
+        ->and($toolInvoked)->toMatchArray([
+            'invocation_id' => 'real-v1',
+            'tool_invocation_id' => 'tool-v1',
+            'output' => 'sunny',
+        ]);
 });

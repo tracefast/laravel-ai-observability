@@ -104,7 +104,7 @@
                 {
                   "key": "tracefast.ai.sdk.version",
                   "value": {
-                    "stringValue": "v0.7.2"
+                    "stringValue": "{{laravel_ai_version}}"
                   }
                 },
                 {
