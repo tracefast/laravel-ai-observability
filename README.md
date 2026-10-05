@@ -57,7 +57,7 @@ It's designed to be safe to drop into a project on day one. Out of the box it wr
 | --- | --- |
 | PHP | 8.4+ |
 | Laravel | 12 or 13 |
-| `laravel/ai` | ^0.7 |
+| `laravel/ai` | ^0.7, ^0.10, or ^1.0 |
 
 ## Installation
 

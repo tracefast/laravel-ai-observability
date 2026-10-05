@@ -13,6 +13,7 @@ use Tracefast\LaravelAiObservability\Exceptions\PayloadTooLargeException;
 use Tracefast\LaravelAiObservability\Exporters\ExporterManager;
 use Tracefast\LaravelAiObservability\Exporters\OtlpEndpoint;
 use Tracefast\LaravelAiObservability\Exporters\OtlpExporter;
+use Tracefast\LaravelAiObservability\Support\PackageInfo;
 
 function otlpTrace(): Trace
 {
@@ -280,7 +281,7 @@ it('sends otlp http json to the explicit endpoint with configured headers', func
             ])
             ->and($span['attributes'])->toContain([
                 'key' => 'tracefast.ai.sdk.version',
-                'value' => ['stringValue' => 'v0.7.2'],
+                'value' => ['stringValue' => PackageInfo::laravelAiVersion()],
             ])
             ->and($span['attributes'])->toContain([
                 'key' => 'input.value',
@@ -464,7 +465,11 @@ it('matches the golden openinference otlp payload fixture', function (): void {
 
     Http::assertSent(function ($request): bool {
         $fixture = json_decode(
-            file_get_contents(__DIR__.'/../Fixtures/otlp-openinference-golden.json'),
+            str_replace(
+                '{{laravel_ai_version}}',
+                PackageInfo::laravelAiVersion(),
+                (string) file_get_contents(__DIR__.'/../Fixtures/otlp-openinference-golden.json'),
+            ),
             true,
             flags: JSON_THROW_ON_ERROR,
         );

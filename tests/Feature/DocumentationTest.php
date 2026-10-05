@@ -7,6 +7,7 @@ it('documents the simplified exporter configuration', function (): void {
 
     expect($readme)->toContain('Observability is enabled by default')
         ->and($readme)->toContain('OpenInference-compatible AI tracing over OpenTelemetry/OTLP for Laravel AI SDK applications')
+        ->and($readme)->toContain('| `laravel/ai` | ^0.7, ^0.10, or ^1.0 |')
         ->and($readme)->toContain('OpenInference message attributes such as `llm.input_messages.*` and `llm.output_messages.*`')
         ->and($readme)->toContain('AI_OBSERVABILITY_EXPORTER=log')
         ->and($readme)->toContain('AI_OBSERVABILITY_EXPORTER=tracefast,braintrust')
